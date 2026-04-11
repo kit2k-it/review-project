@@ -1,7 +1,5 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function sendComplaintEmail({
   toEmail,
   companyName,
@@ -76,6 +74,8 @@ export async function sendComplaintEmail({
 </body>
 </html>
   `.trim();
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
 
   const { error } = await resend.emails.send({
     from: fromEmail,
