@@ -2,6 +2,6 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/scan/[code]/page": "app/scan/[code]/page.js",
   "/(dashboard)/companies/[id]/edit/page": "app/(dashboard)/companies/[id]/edit/page.js",
-  "/(dashboard)/companies/page": "app/(dashboard)/companies/page.js",
-  "/(dashboard)/companies/[id]/qr-codes/page": "app/(dashboard)/companies/[id]/qr-codes/page.js"
+  "/(dashboard)/companies/[id]/qr-codes/page": "app/(dashboard)/companies/[id]/qr-codes/page.js",
+  "/(dashboard)/companies/page": "app/(dashboard)/companies/page.js"
 }
