@@ -4,28 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { MapPin, Sparkles, Copy, ExternalLink } from "lucide-react";
-
-interface ScanData {
-  reviewId: string;
-  content: string;
-  rating: number;
-  isAiGenerated: boolean;
-  company: {
-    name: string;
-    address: string;
-    category: string;
-    logoUrl?: string;
-    googleReviewUrl?: string;
-    hashtags?: string;
-  };
-  socialLinks?: { facebook?: string; tiktok?: string };
-}
+import { ScanData } from "./ComplaintForm";
 
 interface ReviewFormProps {
   data: ScanData;
+  onBack?: () => void;
 }
 
-export default function ReviewForm({ data }: ReviewFormProps) {
+export default function ReviewForm({ data, onBack }: ReviewFormProps) {
   const [content, setContent] = useState(data.content);
   const [rating, setRating] = useState(data.rating);
 
@@ -77,6 +63,14 @@ export default function ReviewForm({ data }: ReviewFormProps) {
 
       {/* Review Form */}
       <div className="w-full max-w-md">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mb-3 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            ← Quay lại
+          </button>
+        )}
         <Card>
           <CardContent className="p-6 space-y-5">
             {data.isAiGenerated && (

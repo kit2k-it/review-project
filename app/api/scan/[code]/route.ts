@@ -38,6 +38,7 @@ export async function GET(
           googleReviewUrl: true,
           logoUrl: true,
           hashtags: true,
+          complaintEmail: true,
         },
       },
     },
@@ -124,6 +125,7 @@ export async function GET(
       logoUrl: company.logoUrl,
       googleReviewUrl: company.googleReviewUrl,
       hashtags: company.hashtags,
+      complaintEmail: company.complaintEmail,
     },
     socialLinks: qrCode.socialLinks,
   });

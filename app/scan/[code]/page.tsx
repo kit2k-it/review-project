@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import ReviewForm from "@/components/scan/ReviewForm";
+import ScanPageClient from "@/components/scan/ScanPageClient";
 
 type Props = { params: Promise<{ code: string }> };
 
@@ -42,11 +42,7 @@ export default async function ScanPage({ params }: Props) {
 
     const scanData = await res.json();
 
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        <ReviewForm data={scanData} />
-      </div>
-    );
+    return <ScanPageClient data={scanData} />;
   } catch {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-50 to-white px-4">
