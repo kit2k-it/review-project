@@ -1,4 +1,28 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+
+# Environment variables (contains secrets)
 .env
 .env.local
-.next
+.env.*.local
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+
+# Misc
+*.pem
