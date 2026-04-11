@@ -1,0 +1,178 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH & USER MANAGEMENT
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(USER)
+  companies     Company[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([email])
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+// ============================================
+// COMPANY MANAGEMENT
+// ============================================
+
+model Company {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  address         String
+  category        String
+  googleMapsUrl   String?
+  googleReviewUrl String?
+  hashtags        String?   // Stored as comma-separated: "restaurant,ha noi,an uong"
+  placeId         String?   // Google Places ID for dedup
+  logoUrl         String?   // Cloudinary URL
+  complaintEmail  String?   // Email nhận khiếu nại từ khách hàng
+  qrCodes             QrCode[]
+  reviews             Review[]
+  preGeneratedReviews PreGeneratedReview[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([name])
+  @@index([category])
+}
+
+model QrCode {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code        String    @unique  // Short unique code: "ABC123XY"
+  socialLinks Json?     // Stored as: { facebook?: string, tiktok?: string }
+  isActive    Boolean   @default(true)
+  reviews     Review[]
+  createdAt   DateTime  @default(now())
+
+  @@index([companyId])
+  @@index([code])
+  @@index([isActive])
+}
+
+// ============================================
+// REVIEW SYSTEM
+// ============================================
+
+// Reviews created from QR scans
+model Review {
+  id           String        @id @default(cuid())
+  qrCodeId     String
+  qrCode       QrCode        @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
+  companyId    String        // Denormalized for faster queries
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content      String
+  rating       Int           // 1-5
+  customerName String?
+  customerPhone String?
+  status       ReviewStatus @default(PENDING)
+  isAiGenerated Boolean     @default(false)
+  usedAt       DateTime?
+  submittedAt  DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@index([companyId])
+  @@index([qrCodeId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ReviewStatus {
+  PENDING    // Reserved but not yet submitted
+  SUBMITTED  // User completed the form
+  EXPIRED    // Left unused for too long (optional)
+}
+
+// Pre-generated AI reviews for fast QR scanning
+// These are "drafts" that get claimed on scan
+model PreGeneratedReview {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content     String
+  rating      Int      // 1-5
+  isUsed      Boolean  @default(false)
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@index([isUsed])
+  @@index([companyId, isUsed]) // Composite index for fast "find one unused"
+}
+
+// ============================================
+// BACKGROUND JOB TRACKING
+// ============================================
+
+// Tracks pending/active background review generation jobs
+// Prevents duplicate concurrent jobs for the same company
+model BackgroundJob {
+  id         String        @id @default(cuid())
+  companyId  String
+  jobType    JobType       @default(GENERATE_REVIEWS)
+  status     JobStatus     @default(PENDING)
+  attempts   Int           @default(0)
+  maxAttempts Int          @default(3)
+  errorMsg   String?
+  result     Json?         // { generatedCount: 15 }
+  startedAt  DateTime?
+  completedAt DateTime?
+  createdAt  DateTime      @default(now())
+  expiresAt  DateTime?    // Auto-cleanup after 24h
+
+  @@index([companyId])
+  @@index([status])
+  @@index([jobType, status]) // Find pending jobs quickly
+}
+
+enum JobType {
+  GENERATE_REVIEWS  // Generate AI reviews
+  REGENERATE_REVIEWS // Regenerate exhausted pool
+}
+
+enum JobStatus {
+  PENDING     // Job queued, not started
+  RUNNING     // Currently being processed
+  COMPLETED   // Successfully finished
+  FAILED      // Failed after all attempts
+  CANCELLED   // Manually cancelled
+}
+
+// ============================================
+// API KEY / SERVICE ACCOUNTS (for system tasks)
+// ============================================
+
+// Lightweight: store only what we need
+model ServiceAccount {
+  id        String   @id @default(cuid())
+  name      String   @unique  // "background-worker", "api-gateway"
+  secret    String   // Hashed API key
+  role      String   // "SYSTEM_WORKER"
+  isActive  Boolean  @default(true)
+  lastUsedAt DateTime?
+  createdAt DateTime @default(now())
+}

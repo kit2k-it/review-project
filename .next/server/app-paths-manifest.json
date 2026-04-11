@@ -1,0 +1,7 @@
+{
+  "/scan/[code]/page": "app/scan/[code]/page.js",
+  "/(dashboard)/companies/page": "app/(dashboard)/companies/page.js",
+  "/(dashboard)/companies/[id]/reviews/page": "app/(dashboard)/companies/[id]/reviews/page.js",
+  "/(dashboard)/companies/[id]/qr-codes/page": "app/(dashboard)/companies/[id]/qr-codes/page.js",
+  "/(dashboard)/reviews/page": "app/(dashboard)/reviews/page.js"
+}

@@ -1,0 +1,147 @@
+"use client";
+
+import { useState } from "react";
+import { updateCompanyAction } from "@/actions/company";
+import { Input } from "@/components/ui/Input";
+import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+
+interface Company {
+  id: string;
+  name: string;
+  address: string;
+  category: string;
+  googleMapsUrl: string | null;
+  googleReviewUrl: string | null;
+  hashtags: string | null;
+  placeId: string | null;
+  logoUrl: string | null;
+}
+
+export default function CompanyEditForm({ company }: { company: Company }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: company.name,
+    address: company.address,
+    category: company.category,
+    googleMapsUrl: company.googleMapsUrl || "",
+    googleReviewUrl: company.googleReviewUrl || "",
+    hashtags: company.hashtags || "",
+    placeId: company.placeId || "",
+  });
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const form = e.currentTarget;
+    const data = new FormData();
+    Object.entries(formData).forEach(([k, v]) => data.set(k, v));
+
+    const result = await updateCompanyAction(company.id, data);
+    setLoading(false);
+    if (result?.error) {
+      setError(result.error);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-text">Chỉnh sửa công ty</h1>
+        <p className="text-sm text-gray-500">Cập nhật thông tin {company.name}</p>
+      </div>
+
+      <Card>
+        <CardContent className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
+            )}
+
+            <Input
+              label="Tên công ty"
+              name="name"
+              value={formData.name}
+              onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+
+            <Input
+              label="Địa chỉ"
+              name="address"
+              value={formData.address}
+              onChange={(e) => setFormData((f) => ({ ...f, address: e.target.value }))}
+              required
+            />
+
+            <div>
+              <label className="text-sm font-medium text-text">
+                Danh mục <span className="text-error">*</span>
+              </label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData((f) => ({ ...f, category: e.target.value }))}
+                className="mt-1 flex h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                required
+              >
+                {[
+                  "Nhà hàng",
+                  "Café",
+                  "Bar",
+                  "Quán ăn",
+                  "Cửa hàng",
+                  "Salon làm đẹp",
+                  "Phòng gym",
+                  "Khách sạn",
+                  "Siêu thị",
+                  "Cửa hàng điện tử",
+                  "Nội thất",
+                  "Khác",
+                ].map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <Input
+              label="Google Maps URL"
+              name="googleMapsUrl"
+              value={formData.googleMapsUrl}
+              onChange={(e) => setFormData((f) => ({ ...f, googleMapsUrl: e.target.value }))}
+            />
+
+            <Input
+              label="Google Review URL"
+              name="googleReviewUrl"
+              value={formData.googleReviewUrl}
+              onChange={(e) => setFormData((f) => ({ ...f, googleReviewUrl: e.target.value }))}
+            />
+
+            <Input
+              label="Hashtags"
+              name="hashtags"
+              value={formData.hashtags}
+              onChange={(e) => setFormData((f) => ({ ...f, hashtags: e.target.value }))}
+              placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" disabled={loading}>
+                {loading ? "Đang lưu..." : "Lưu thay đổi"}
+              </Button>
+              <a
+                href="/companies"
+                className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Hủy
+              </a>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx next:*)",
+      "Bash(node -e \"const n = require\\(''next-auth''\\); console.log\\(Object.keys\\(n\\)\\)\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(node -e \"const n = require\\(''next-auth''\\); console.log\\(typeof n, typeof n.default\\)\")",
+      "Bash(PGPASSWORD=123456 psql -h localhost -U postgres -d review_ai -c \"SELECT 1\" 2>&1)",
+      "Bash(docker exec:*)",
+      "Bash(npx tsx:*)",
+      "Bash(powershell -Command \"Rename-Item -Path ''app/\\(dashboard\\)'' -NewName ''dashboard''\")",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(net start:*)",
+      "Bash(pg_isready -h localhost -p 5432)",
+      "Bash(where psql:*)",
+      "Bash(where pg_ctl)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(where node:*)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 9968\")",
+      "Bash(tasklist)",
+      "Bash(curl -s \"http://localhost:3000/api/scan/BB88BAJZ\" --max-time 15 -L)",
+      "Bash(curl -s -I \"http://localhost:3000/api/scan/BB88BAJZ\" --max-time 15 -L)"
+    ]
+  }
+}
