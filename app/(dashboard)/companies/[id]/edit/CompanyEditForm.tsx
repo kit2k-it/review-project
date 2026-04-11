@@ -16,6 +16,7 @@ interface Company {
   hashtags: string | null;
   placeId: string | null;
   logoUrl: string | null;
+  complaintEmail: string | null;
 }
 
 export default function CompanyEditForm({ company }: { company: Company }) {
@@ -29,6 +30,7 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     googleReviewUrl: company.googleReviewUrl || "",
     hashtags: company.hashtags || "",
     placeId: company.placeId || "",
+    complaintEmail: company.complaintEmail || "",
   });
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -36,11 +38,7 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     setLoading(true);
     setError(null);
 
-    const form = e.currentTarget;
-    const data = new FormData();
-    Object.entries(formData).forEach(([k, v]) => data.set(k, v));
-
-    const result = await updateCompanyAction(company.id, data);
+    const result = await updateCompanyAction(company.id, formData);
     setLoading(false);
     if (result?.error) {
       setError(result.error);
@@ -126,6 +124,15 @@ export default function CompanyEditForm({ company }: { company: Company }) {
               value={formData.hashtags}
               onChange={(e) => setFormData((f) => ({ ...f, hashtags: e.target.value }))}
               placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <Input
+              label="Email nhận khiếu nại"
+              name="complaintEmail"
+              type="email"
+              value={formData.complaintEmail}
+              onChange={(e) => setFormData((f) => ({ ...f, complaintEmail: e.target.value }))}
+              placeholder="complaints@example.com"
             />
 
             <div className="flex gap-3 pt-2">

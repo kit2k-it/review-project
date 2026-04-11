@@ -10,7 +10,7 @@ const SESSION_COOKIE = "qrr_session";
 
 // Public routes
 const publicRoutes = ["/login", "/register"];
-const publicPrefixes = ["/scan/", "/api/scan/"];
+const publicPrefixes = ["/scan/", "/api/scan/", "/api/complaint"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

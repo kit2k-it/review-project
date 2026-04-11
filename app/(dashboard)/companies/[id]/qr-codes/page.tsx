@@ -20,7 +20,7 @@ export default async function QrCodesPage({ params }: Props) {
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company || company.userId !== user.id) notFound();
 
-  const [qrCodes, pool] = await Promise.all([
+  const [qrCodes, poolResult] = await Promise.all([
     prisma.qrCode.findMany({
       where: { companyId: id },
       include: { _count: { select: { reviews: true } } },
@@ -29,5 +29,7 @@ export default async function QrCodesPage({ params }: Props) {
     getCompanyReviewPoolAction(id),
   ]);
 
-  return <QrCodesManager company={company} qrCodes={qrCodes} pool={pool} />;
+  if ("error" in poolResult) notFound();
+
+  return <QrCodesManager company={company} qrCodes={qrCodes} pool={poolResult} />;
 }

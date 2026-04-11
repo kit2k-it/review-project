@@ -12,7 +12,7 @@ import { z } from "zod";
 // ==========================================
 export async function createCompanyAction(
   prevState: { error?: string } | null,
-  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string }
+  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
 ) {
   const user = await requireAuth();
 
@@ -25,6 +25,7 @@ export async function createCompanyAction(
     hashtags: data.hashtags,
     placeId: data.placeId,
     logoUrl: "",
+    complaintEmail: data.complaintEmail || "",
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -44,6 +45,7 @@ export async function createCompanyAction(
         hashtags: parsed.data.hashtags || null,
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
+        complaintEmail: parsed.data.complaintEmail || null,
       },
     });
 
@@ -61,7 +63,10 @@ export async function createCompanyAction(
 // ==========================================
 // UPDATE COMPANY
 // ==========================================
-export async function updateCompanyAction(id: string, formData: FormData) {
+export async function updateCompanyAction(
+  id: string,
+  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; logoUrl?: string; complaintEmail?: string }
+) {
   const user = await requireAuth();
 
   const company = await prisma.company.findUnique({ where: { id } });
@@ -69,14 +74,15 @@ export async function updateCompanyAction(id: string, formData: FormData) {
   if (company.userId !== user.id) return { error: "Không có quyền chỉnh sửa" };
 
   const raw = {
-    name: formData.get("name") as string,
-    address: formData.get("address") as string,
-    category: formData.get("category") as string,
-    googleMapsUrl: formData.get("googleMapsUrl") as string,
-    googleReviewUrl: formData.get("googleReviewUrl") as string,
-    hashtags: formData.get("hashtags") as string,
-    placeId: formData.get("placeId") as string,
-    logoUrl: formData.get("logoUrl") as string,
+    name: data.name,
+    address: data.address,
+    category: data.category,
+    googleMapsUrl: data.googleMapsUrl,
+    googleReviewUrl: data.googleReviewUrl,
+    hashtags: data.hashtags,
+    placeId: data.placeId,
+    logoUrl: data.logoUrl || "",
+    complaintEmail: data.complaintEmail || "",
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -96,6 +102,7 @@ export async function updateCompanyAction(id: string, formData: FormData) {
         hashtags: parsed.data.hashtags || null,
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
+        complaintEmail: parsed.data.complaintEmail || null,
       },
     });
 

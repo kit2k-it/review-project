@@ -20,6 +20,7 @@ export const companySchema = z.object({
   hashtags: z.string().optional(),
   placeId: z.string().optional(),
   logoUrl: z.string().url().optional().or(z.literal("")),
+  complaintEmail: z.string().email("Email không hợp lệ").optional().or(z.literal("")),
 });
 
 export const qrCodeSchema = z.object({

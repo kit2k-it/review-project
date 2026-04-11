@@ -24,10 +24,15 @@ export default async function ReviewsPoolPage({ params }: Props) {
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company || company.userId !== user.id) notFound();
 
-  const [{ reviews, pagination }, pool] = await Promise.all([
+  const [reviewsResult, pool] = await Promise.all([
     getPreGeneratedReviewsAction({ companyId: id, pageSize: 30 }),
     getCompanyReviewPoolAction(id),
   ]);
+
+  if ("error" in reviewsResult || "error" in pool) notFound();
+
+  const { reviews, pagination } = reviewsResult;
+  const safePool = pool as { available: number; used: number; pendingJob: boolean };
 
   return (
     <div className="space-y-6">
@@ -53,7 +58,7 @@ export default async function ReviewsPoolPage({ params }: Props) {
               <CheckCircle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-text">{pool.available}</p>
+              <p className="text-2xl font-bold text-text">{safePool.available}</p>
               <p className="text-sm text-gray-500">Còn trống</p>
             </div>
           </CardContent>
@@ -64,19 +69,19 @@ export default async function ReviewsPoolPage({ params }: Props) {
               <Star className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-text">{pool.used}</p>
+              <p className="text-2xl font-bold text-text">{safePool.used}</p>
               <p className="text-sm text-gray-500">Đã dùng</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
-            <div className={`rounded-lg p-3 ${pool.pendingJob ? "bg-amber-50 text-amber-600" : "bg-gray-50 text-gray-400"}`}>
-              <RefreshCw className={`h-5 w-5 ${pool.pendingJob ? "animate-spin" : ""}`} />
+            <div className={`rounded-lg p-3 ${safePool.pendingJob ? "bg-amber-50 text-amber-600" : "bg-gray-50 text-gray-400"}`}>
+              <RefreshCw className={`h-5 w-5 ${safePool.pendingJob ? "animate-spin" : ""}`} />
             </div>
             <div>
               <p className="text-2xl font-bold text-text">
-                {pool.pendingJob ? "Đang tạo..." : "Sẵn sàng"}
+                {safePool.pendingJob ? "Đang tạo..." : "Sẵn sàng"}
               </p>
               <p className="text-sm text-gray-500">Trạng thái</p>
             </div>

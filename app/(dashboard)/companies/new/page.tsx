@@ -39,6 +39,7 @@ export default function NewCompanyPage() {
     googleReviewUrl: "",
     hashtags: "",
     placeId: "",
+    complaintEmail: "",
   });
 
   async function handleSearch() {
@@ -48,7 +49,7 @@ export default function NewCompanyPage() {
     setError(null);
     setSelectedPlace(null);
     setPredictions([]);
-    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "" }));
+    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "", complaintEmail: "" }));
 
     try {
       const res = await fetch(`/api/places?q=${encodeURIComponent(query.trim())}`);
@@ -82,6 +83,7 @@ export default function NewCompanyPage() {
           googleReviewUrl: details.googleReviewUrl,
           hashtags: "",
           placeId: details.placeId,
+          complaintEmail: "",
         });
         setPredictions([]);
         setQuery("");
@@ -274,6 +276,14 @@ export default function NewCompanyPage() {
               value={formData.hashtags}
               onChange={(e) => setFormData((f) => ({ ...f, hashtags: e.target.value }))}
               placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <Input
+              label="Email nhận khiếu nại"
+              type="email"
+              value={formData.complaintEmail}
+              onChange={(e) => setFormData((f) => ({ ...f, complaintEmail: e.target.value }))}
+              placeholder="complaints@example.com"
             />
 
             <div className="flex gap-3 pt-2">
