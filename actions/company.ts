@@ -12,7 +12,7 @@ import { z } from "zod";
 // ==========================================
 export async function createCompanyAction(
   prevState: { error?: string } | null,
-  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
+  data: { name: string; address: string; category: string; phone: string; keywords: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
 ) {
   const user = await requireAuth();
 
@@ -20,6 +20,8 @@ export async function createCompanyAction(
     name: data.name,
     address: data.address,
     category: data.category,
+    phone: data.phone,
+    keywords: data.keywords,
     googleMapsUrl: data.googleMapsUrl,
     googleReviewUrl: data.googleReviewUrl,
     hashtags: data.hashtags,
@@ -40,6 +42,8 @@ export async function createCompanyAction(
         name: parsed.data.name,
         address: parsed.data.address,
         category: parsed.data.category,
+        phone: parsed.data.phone || null,
+        keywords: parsed.data.keywords || null,
         googleMapsUrl: parsed.data.googleMapsUrl || null,
         googleReviewUrl: parsed.data.googleReviewUrl || null,
         hashtags: parsed.data.hashtags || null,
@@ -56,7 +60,7 @@ export async function createCompanyAction(
     return { success: true, companyId: company.id };
   } catch (error) {
     console.error("Create company error:", error);
-    return { error: "Không thể tạo công ty. Vui lòng thử lại." };
+    return { error: "Không thể tạo khách hàng. Vui lòng thử lại." };
   }
 }
 
@@ -65,18 +69,20 @@ export async function createCompanyAction(
 // ==========================================
 export async function updateCompanyAction(
   id: string,
-  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; logoUrl?: string; complaintEmail?: string }
+  data: { name: string; address: string; category: string; phone: string; keywords: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; logoUrl?: string; complaintEmail?: string }
 ) {
   const user = await requireAuth();
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return { error: "Công ty không tồn tại" };
+  if (!company) return { error: "Khách hàng không tồn tại" };
   if (company.userId !== user.id) return { error: "Không có quyền chỉnh sửa" };
 
   const raw = {
     name: data.name,
     address: data.address,
     category: data.category,
+    phone: data.phone,
+    keywords: data.keywords,
     googleMapsUrl: data.googleMapsUrl,
     googleReviewUrl: data.googleReviewUrl,
     hashtags: data.hashtags,
@@ -97,6 +103,8 @@ export async function updateCompanyAction(
         name: parsed.data.name,
         address: parsed.data.address,
         category: parsed.data.category,
+        phone: parsed.data.phone || null,
+        keywords: parsed.data.keywords || null,
         googleMapsUrl: parsed.data.googleMapsUrl || null,
         googleReviewUrl: parsed.data.googleReviewUrl || null,
         hashtags: parsed.data.hashtags || null,
@@ -110,24 +118,28 @@ export async function updateCompanyAction(
     revalidatePath(`/companies/${id}`);
     return { success: true };
   } catch (error) {
-    return { error: "Không thể cập nhật công ty" };
+    return { error: "Không thể cập nhật khách hàng" };
   }
 }
 
 // ==========================================
-// DELETE COMPANY
+// TOGGLE COMPANY ACTIVE / DEACTIVE
 // ==========================================
-export async function deleteCompanyAction(id: string) {
+export async function toggleCompanyActiveAction(id: string) {
   const user = await requireAuth();
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return { error: "Công ty không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền xóa" };
+  if (!company) return { error: "Khách hàng không tồn tại" };
+  if (company.userId !== user.id) return { error: "Không có quyền thao tác" };
 
-  await prisma.company.delete({ where: { id } });
+  await prisma.company.update({
+    where: { id },
+    data: { isActive: !company.isActive },
+  });
 
   revalidatePath("/companies");
-  return { success: true };
+  revalidatePath(`/companies/${id}`);
+  return { success: true, isActive: !company.isActive };
 }
 
 // ==========================================
@@ -138,6 +150,7 @@ export async function listCompaniesAction(params: {
   category?: string;
   page?: number;
   pageSize?: number;
+  includeInactive?: boolean;
 }) {
   const user = await requireAuth();
   const page = params.page || 1;
@@ -145,6 +158,7 @@ export async function listCompaniesAction(params: {
 
   const where = {
     userId: user.id,
+    ...(params.includeInactive ? {} : { isActive: true }),
     ...(params.search && {
       OR: [
         { name: { contains: params.search, mode: "insensitive" as const } },

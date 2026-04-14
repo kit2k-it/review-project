@@ -7,7 +7,6 @@ import {
   Building2,
   QrCode,
   Star,
-  Settings,
   LogOut,
   Scan,
 } from "lucide-react";
@@ -15,9 +14,8 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/companies", label: "Công ty", icon: Building2 },
+  { href: "/companies", label: "Khách hàng", icon: Building2 },
   { href: "/reviews", label: "Đánh giá", icon: Star },
-  { href: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -33,7 +31,7 @@ export function Sidebar({ user }: SidebarProps) {
   }
 
   return (
-    <aside className="flex w-64 flex-col border-r border-border bg-surface">
+    <aside className="flex h-full w-64 flex-col border-r border-border bg-surface">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b border-border px-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">

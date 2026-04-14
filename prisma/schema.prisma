@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -42,12 +41,15 @@ model Company {
   name            String
   address         String
   category        String
+  phone           String?   // Số điện thoại liên hệ
+  keywords        String?   // Từ khoá, phân cách bằng dấu phẩy: "restaurant,ha noi,an uong"
   googleMapsUrl   String?
   googleReviewUrl String?
-  hashtags        String?   // Stored as comma-separated: "restaurant,ha noi,an uong"
+  hashtags        String?   // Alias cho keywords (backward compatibility)
   placeId         String?   // Google Places ID for dedup
   logoUrl         String?   // Cloudinary URL
   complaintEmail  String?   // Email nhận khiếu nại từ khách hàng
+  isActive        Boolean   @default(true) // false = đã huỷ, không hiển thị
   qrCodes             QrCode[]
   reviews             Review[]
   preGeneratedReviews PreGeneratedReview[]
@@ -110,18 +112,23 @@ enum ReviewStatus {
 // Pre-generated AI reviews for fast QR scanning
 // These are "drafts" that get claimed on scan
 model PreGeneratedReview {
-  id          String   @id @default(cuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  content     String
-  rating      Int      // 1-5
-  isUsed      Boolean  @default(false)
-  usedAt      DateTime?
-  createdAt   DateTime @default(now())
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content          String
+  rating           Int       // 1-5
+  isUsed           Boolean   @default(false)
+  isManuallyCreated Boolean  @default(false)  // true = tạo thủ công, false = tạo bằng AI
+  isActive         Boolean   @default(true)   // false = bị vô hiệu hóa, không dùng được
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 
   @@index([companyId])
   @@index([isUsed])
-  @@index([companyId, isUsed]) // Composite index for fast "find one unused"
+  @@index([isActive])
+  @@index([companyId, isUsed, isActive]) // Composite index for fast "find one unused"
+  @@index([companyId, createdAt])         // For FIFO ordering
 }
 
 // ============================================

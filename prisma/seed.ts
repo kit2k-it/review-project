@@ -82,6 +82,8 @@ async function main() {
       data: {
         companyId: company.id,
         ...review,
+        isManuallyCreated: false,
+        isActive: true,
       },
     });
   }

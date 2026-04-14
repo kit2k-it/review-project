@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   ]);
 
   const stats = [
-    { label: "Công ty", value: companyCount, icon: Building2, color: "text-primary" },
+    { label: "Khách hàng", value: companyCount, icon: Building2, color: "text-primary" },
     { label: "Mã QR", value: qrCount, icon: QrCode, color: "text-secondary" },
     { label: "Đánh giá", value: reviewCount, icon: Star, color: "text-accent" },
   ];
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
               href="/companies/new"
               className="block rounded-lg border border-border p-4 hover:border-primary hover:bg-primary/5 transition-colors"
             >
-              <p className="font-medium text-text">+ Thêm công ty mới</p>
+              <p className="font-medium text-text">+ Thêm khách hàng mới</p>
               <p className="text-sm text-gray-500">Tìm kiếm trên Google Maps</p>
             </Link>
             <Link
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
               className="block rounded-lg border border-border p-4 hover:border-primary hover:bg-primary/5 transition-colors"
             >
               <p className="font-medium text-text">Quản lý mã QR</p>
-              <p className="text-sm text-gray-500">Tạo và tải mã QR cho công ty</p>
+              <p className="text-sm text-gray-500">Tạo và tải mã QR cho khách hàng</p>
             </Link>
           </CardContent>
         </Card>

@@ -11,6 +11,8 @@ interface Company {
   name: string;
   address: string;
   category: string;
+  phone: string | null;
+  keywords: string | null;
   googleMapsUrl: string | null;
   googleReviewUrl: string | null;
   hashtags: string | null;
@@ -26,6 +28,8 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     name: company.name,
     address: company.address,
     category: company.category,
+    phone: company.phone || "",
+    keywords: company.keywords || "",
     googleMapsUrl: company.googleMapsUrl || "",
     googleReviewUrl: company.googleReviewUrl || "",
     hashtags: company.hashtags || "",
@@ -42,13 +46,15 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     setLoading(false);
     if (result?.error) {
       setError(result.error);
+    } else if (result?.success) {
+      window.location.href = "/companies";
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-text">Chỉnh sửa công ty</h1>
+        <h1 className="text-2xl font-bold text-text">Chỉnh sửa khách hàng</h1>
         <p className="text-sm text-gray-500">Cập nhật thông tin {company.name}</p>
       </div>
 
@@ -60,7 +66,7 @@ export default function CompanyEditForm({ company }: { company: Company }) {
             )}
 
             <Input
-              label="Tên công ty"
+              label="Tên khách hàng"
               name="name"
               value={formData.name}
               onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
@@ -116,6 +122,23 @@ export default function CompanyEditForm({ company }: { company: Company }) {
               name="googleReviewUrl"
               value={formData.googleReviewUrl}
               onChange={(e) => setFormData((f) => ({ ...f, googleReviewUrl: e.target.value }))}
+            />
+
+            <Input
+              label="Số điện thoại"
+              name="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="VD: 0901234567"
+            />
+
+            <Input
+              label="Từ khoá"
+              name="keywords"
+              value={formData.keywords}
+              onChange={(e) => setFormData((f) => ({ ...f, keywords: e.target.value }))}
+              placeholder="VD: restaurant, ha noi, food"
             />
 
             <Input

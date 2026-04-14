@@ -68,12 +68,12 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">Mã QR — {company.name}</h1>
-          <p className="text-sm text-gray-500">Tạo và quản lý mã QR cho công ty</p>
+          <h2 className="text-xl font-bold text-text">Mã QR</h2>
+          <p className="text-sm text-gray-500">Tạo và quản lý mã QR</p>
         </div>
-        <Button onClick={handleCreate} disabled={creating}>
+        <Button onClick={handleCreate} disabled={creating} className="w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           {creating ? "Đang tạo..." : "Tạo mã QR mới"}
         </Button>
@@ -125,7 +125,7 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool 
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {qrCodes.map((qr) => (
             <QrCodeCard
               key={qr.id}
@@ -178,20 +178,20 @@ function QrCodeCard({
 
   return (
     <Card>
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="p-3 sm:p-4 space-y-2 sm:space-y-3">
         {/* QR preview */}
-        <div className="flex justify-center bg-white p-4 rounded-lg border border-border">
+        <div className="flex justify-center bg-white p-3 sm:p-4 rounded-lg border border-border">
           {qrDataUrl ? (
             <Image
               src={qrDataUrl}
               alt="QR Code"
-              width={160}
-              height={160}
-              className="rounded"
+              width={140}
+              height={140}
+              className="rounded w-32 h-32 sm:w-40 sm:h-40 object-contain"
               unoptimized
             />
           ) : (
-            <div className="h-40 w-40 flex items-center justify-center">
+            <div className="h-32 w-32 sm:h-40 sm:w-40 flex items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             </div>
           )}
@@ -225,26 +225,26 @@ function QrCodeCard({
         )}
 
         {/* Actions */}
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           <button
             onClick={handleCopyUrl}
-            className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[80px]"
             title="Copy URL"
           >
-            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-            {copied ? "Đã copy" : "Copy URL"}
+            {copied ? <Check className="h-3 w-3 text-green-500 flex-shrink-0" /> : <Copy className="h-3 w-3 flex-shrink-0" />}
+            {copied ? "Đã copy" : "Copy"}
           </button>
           <button
             onClick={handleDownload}
-            className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[60px]"
             title="Tải PNG"
           >
-            <Download className="h-3 w-3" />
+            <Download className="h-3 w-3 flex-shrink-0" />
             PNG
           </button>
           <button
             onClick={() => onToggle(qr.id)}
-            className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
             title={qr.isActive ? "Tắt" : "Bật"}
           >
             {qr.isActive ? (

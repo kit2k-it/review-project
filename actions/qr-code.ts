@@ -16,7 +16,7 @@ export async function createQrCodeAction(
 
   // Verify ownership
   const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) return { error: "Công ty không tồn tại" };
+  if (!company) return { error: "Khách hàng không tồn tại" };
   if (company.userId !== user.id) return { error: "Không có quyền" };
 
   // Generate unique code

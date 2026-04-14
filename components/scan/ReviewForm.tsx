@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { MapPin, Sparkles, Copy, ExternalLink } from "lucide-react";
 import { ScanData } from "./ComplaintForm";
+import { markReviewAsDoneAction } from "@/actions/review";
 
 interface ReviewFormProps {
   data: ScanData;
@@ -14,14 +15,20 @@ interface ReviewFormProps {
 export default function ReviewForm({ data, onBack }: ReviewFormProps) {
   const [content, setContent] = useState(data.content);
   const [rating, setRating] = useState(data.rating);
+  const [isPending, startTransition] = useTransition();
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   async function handleCopyAndRedirect(e: React.FormEvent) {
     e.preventDefault();
 
+    // Mark review as SUBMITTED in DB first
+    startTransition(async () => {
+      await markReviewAsDoneAction(data.reviewId);
+    });
+
     try {
       await navigator.clipboard.writeText(content);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = content;
       document.body.appendChild(textarea);
@@ -30,10 +37,34 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
       document.body.removeChild(textarea);
     }
 
-    // Redirect to Google review URL
     if (data.company.googleReviewUrl) {
       window.open(data.company.googleReviewUrl, "_blank", "noopener,noreferrer");
     }
+
+    // Show success screen after a short delay
+    setTimeout(() => setIsSubmitted(true), 500);
+  }
+
+  if (isSubmitted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+            <svg className="h-10 w-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-text">Cảm ơn bạn!</h2>
+          <p className="text-gray-500 max-w-xs mx-auto">
+            Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn đã dành thời gian đánh giá chúng tôi!
+          </p>
+          <div className="pt-2" />
+        </div>
+        <p className="mt-12 text-xs text-gray-400">
+          Powered by QRReview
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -57,6 +88,38 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
                 #{tag.trim()}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Social links */}
+        {data.socialLinks && (data.socialLinks.facebook || data.socialLinks.tiktok) && (
+          <div className="mt-3 flex items-center justify-center gap-2">
+            {data.socialLinks.facebook && (
+              <a
+                href={data.socialLinks.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Facebook
+              </a>
+            )}
+            {data.socialLinks.tiktok && (
+              <a
+                href={data.socialLinks.tiktok}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-full bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+                </svg>
+                TikTok
+              </a>
+            )}
           </div>
         )}
       </div>
@@ -118,44 +181,21 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
               </div>
 
               {/* Submit */}
-              <Button type="submit" size="lg" className="w-full">
-                <Copy className="h-4 w-4" />
-                Copy và Gửi đánh giá
-                {data.company.googleReviewUrl && <ExternalLink className="h-4 w-4 ml-1" />}
+              <Button type="submit" size="lg" className="w-full" disabled={isPending}>
+                {isPending ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Đang xử lý...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copy và Gửi đánh giá
+                    {data.company.googleReviewUrl && <ExternalLink className="h-4 w-4 ml-1" />}
+                  </>
+                )}
               </Button>
             </form>
-
-            {/* Social links */}
-            {data.socialLinks && (
-              <div className="flex justify-center gap-3 pt-2 border-t border-border">
-                {data.socialLinks.facebook && (
-                  <a
-                    href={data.socialLinks.facebook}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-blue-500 hover:underline"
-                  >
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                    </svg>
-                    Facebook
-                  </a>
-                )}
-                {data.socialLinks.tiktok && (
-                  <a
-                    href={data.socialLinks.tiktok}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-pink-500 hover:underline"
-                  >
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 0010.86 4.46V13a8.28 8.28 0 005.58 2.13V9.77a4.85 4.85 0 01-2-.57z"/>
-                    </svg>
-                    TikTok
-                  </a>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

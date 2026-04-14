@@ -12,9 +12,11 @@ export const registerSchema = z.object({
 });
 
 export const companySchema = z.object({
-  name: z.string().min(2, "Tên công ty tối thiểu 2 ký tự"),
+  name: z.string().min(2, "Tên khách hàng tối thiểu 2 ký tự"),
   address: z.string().min(5, "Địa chỉ tối thiểu 5 ký tự"),
   category: z.string().min(1, "Vui lòng chọn danh mục"),
+  phone: z.string().optional(),
+  keywords: z.string().optional(),
   googleMapsUrl: z.string().url("URL Google Maps không hợp lệ").optional().or(z.literal("")),
   googleReviewUrl: z.string().url("URL Google Review không hợp lệ").optional().or(z.literal("")),
   hashtags: z.string().optional(),
@@ -24,7 +26,7 @@ export const companySchema = z.object({
 });
 
 export const qrCodeSchema = z.object({
-  companyId: z.string().min(1, "Vui lòng chọn công ty"),
+  companyId: z.string().min(1, "Vui lòng chọn khách hàng"),
   socialLinks: z
     .object({
       facebook: z.string().url().optional(),

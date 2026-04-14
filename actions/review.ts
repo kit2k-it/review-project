@@ -2,27 +2,25 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 import { reviewSubmitSchema } from "@/lib/validators";
 
 // ==========================================
-// SUBMIT REVIEW (from scan page)
+// SUBMIT REVIEW (from scan page - no auth required)
 // ==========================================
 export async function submitReviewAction(formData: FormData) {
   const raw = {
     reviewId: formData.get("reviewId") as string,
     content: formData.get("content") as string,
     rating: Number(formData.get("rating")),
-    customerName: formData.get("customerName") as string,
-    customerPhone: formData.get("customerPhone") as string,
   };
 
-  const parsed = reviewSubmitSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+  if (!raw.reviewId || !raw.content || !raw.rating) {
+    return { error: "Dữ liệu không hợp lệ" };
   }
 
   const review = await prisma.review.findUnique({
-    where: { id: parsed.data.reviewId },
+    where: { id: raw.reviewId },
   });
 
   if (!review) {
@@ -33,14 +31,39 @@ export async function submitReviewAction(formData: FormData) {
     return { error: "Đánh giá này đã được gửi trước đó" };
   }
 
-  // Update review status
   await prisma.review.update({
-    where: { id: parsed.data.reviewId },
+    where: { id: raw.reviewId },
     data: {
-      content: parsed.data.content,
-      rating: parsed.data.rating,
-      customerName: parsed.data.customerName || null,
-      customerPhone: parsed.data.customerPhone || null,
+      content: raw.content,
+      rating: raw.rating,
+      status: "SUBMITTED",
+      submittedAt: new Date(),
+    },
+  });
+
+  return { success: true };
+}
+
+// ==========================================
+// MARK REVIEW AS DONE (copy URL opened)
+// Called when user clicks "Copy và Gửi" - marks review as submitted
+// ==========================================
+export async function markReviewAsDoneAction(reviewId: string) {
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+  });
+
+  if (!review) {
+    return { error: "Đánh giá không tồn tại" };
+  }
+
+  if (review.status === "SUBMITTED") {
+    return { success: true }; // Already done
+  }
+
+  await prisma.review.update({
+    where: { id: reviewId },
+    data: {
       status: "SUBMITTED",
       submittedAt: new Date(),
     },
@@ -316,4 +339,111 @@ export async function getCompanyReviewPoolAction(companyId: string) {
   ]);
 
   return { companyId, available, used, pendingJob: !!pendingJob };
+}
+
+// ==========================================
+// CREATE PRE-GENERATED REVIEW MANUALLY
+// ==========================================
+export async function createPreGeneratedReviewAction(data: {
+  companyId: string;
+  content: string;
+  rating: number;
+}) {
+  const user = await requireAuth();
+
+  const company = await prisma.company.findUnique({ where: { id: data.companyId } });
+  if (!company || company.userId !== user.id) {
+    return { error: "Không có quyền truy cập công ty này" };
+  }
+
+  if (!data.content || data.content.trim().length < 10) {
+    return { error: "Nội dung đánh giá phải có ít nhất 10 ký tự" };
+  }
+
+  if (data.rating < 1 || data.rating > 5) {
+    return { error: "Số sao phải từ 1 đến 5" };
+  }
+
+  const review = await prisma.preGeneratedReview.create({
+    data: {
+      companyId: data.companyId,
+      content: data.content.trim(),
+      rating: data.rating,
+      isManuallyCreated: true,
+      isActive: true,
+    },
+  });
+
+  revalidatePath(`/companies/${data.companyId}/reviews`);
+
+  return { success: true, review };
+}
+
+// ==========================================
+// UPDATE PRE-GENERATED REVIEW
+// ==========================================
+export async function updatePreGeneratedReviewAction(data: {
+  reviewId: string;
+  content: string;
+  rating: number;
+}) {
+  const user = await requireAuth();
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: data.reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  if (review.company.userId !== user.id) {
+    return { error: "Không có quyền chỉnh sửa đánh giá này" };
+  }
+
+  if (!data.content || data.content.trim().length < 10) {
+    return { error: "Nội dung đánh giá phải có ít nhất 10 ký tự" };
+  }
+
+  if (data.rating < 1 || data.rating > 5) {
+    return { error: "Số sao phải từ 1 đến 5" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: data.reviewId },
+    data: {
+      content: data.content.trim(),
+      rating: data.rating,
+    },
+  });
+
+  return { success: true, review: updated };
+}
+
+// ==========================================
+// DEACTIVATE / ACTIVATE PRE-GENERATED REVIEW
+// ==========================================
+export async function togglePreGeneratedReviewActiveAction(reviewId: string) {
+  const user = await requireAuth();
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  if (review.company.userId !== user.id) {
+    return { error: "Không có quyền thao tác với đánh giá này" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: reviewId },
+    data: { isActive: !review.isActive },
+  });
+
+  return { success: true, review: updated };
 }

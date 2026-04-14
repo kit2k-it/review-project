@@ -35,6 +35,8 @@ export default function NewCompanyPage() {
     name: "",
     address: "",
     category: "",
+    phone: "",
+    keywords: "",
     googleMapsUrl: "",
     googleReviewUrl: "",
     hashtags: "",
@@ -79,9 +81,11 @@ export default function NewCompanyPage() {
           name: details.name,
           address: details.address,
           category: details.category,
+          phone: details.phone || "",
+          keywords: details.keywords || "",
           googleMapsUrl: details.googleMapsUrl,
           googleReviewUrl: details.googleReviewUrl,
-          hashtags: "",
+          hashtags: details.hashtags || "",
           placeId: details.placeId,
           complaintEmail: "",
         });
@@ -106,13 +110,15 @@ export default function NewCompanyPage() {
     setPending(false);
     if (result?.error) {
       setError(result.error);
+    } else if (result?.success) {
+      window.location.href = "/companies";
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-text">Thêm công ty mới</h1>
+        <h1 className="text-2xl font-bold text-text">Thêm khách hàng mới</h1>
         <p className="text-sm text-gray-500">Tìm kiếm trên Google Maps hoặc nhập thủ công</p>
       </div>
 
@@ -212,7 +218,7 @@ export default function NewCompanyPage() {
             )}
 
             <Input
-              label="Tên công ty"
+              label="Tên khách hàng"
               value={formData.name}
               onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
               placeholder="VD: Nhà hàng ABC"
@@ -272,6 +278,21 @@ export default function NewCompanyPage() {
             />
 
             <Input
+              label="Số điện thoại"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="VD: 0901234567"
+            />
+
+            <Input
+              label="Từ khoá"
+              value={formData.keywords}
+              onChange={(e) => setFormData((f) => ({ ...f, keywords: e.target.value }))}
+              placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <Input
               label="Hashtags"
               value={formData.hashtags}
               onChange={(e) => setFormData((f) => ({ ...f, hashtags: e.target.value }))}
@@ -288,7 +309,7 @@ export default function NewCompanyPage() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={pending}>
-                {pending ? "Đang lưu..." : "Lưu công ty"}
+                {pending ? "Đang lưu..." : "Lưu khách hàng"}
               </Button>
               <a href="/companies" className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
                 Hủy
