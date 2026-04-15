@@ -119,7 +119,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceResult | nu
       category,
       phone: place.formatted_phone_number || undefined,
       googleMapsUrl: place.url || "",
-      googleReviewUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+      googleReviewUrl: `https://search.google.com/local/writereview?placeid=${place.place_id}`,
       photoUrl,
       website: place.website || undefined,
     };

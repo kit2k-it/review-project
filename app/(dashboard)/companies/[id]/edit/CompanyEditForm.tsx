@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { updateCompanyAction } from "@/actions/company";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -162,12 +163,12 @@ export default function CompanyEditForm({ company }: { company: Company }) {
               <Button type="submit" disabled={loading}>
                 {loading ? "Đang lưu..." : "Lưu thay đổi"}
               </Button>
-              <a
+              <Link
                 href="/companies"
                 className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 Hủy
-              </a>
+              </Link>
             </div>
           </form>
         </CardContent>
