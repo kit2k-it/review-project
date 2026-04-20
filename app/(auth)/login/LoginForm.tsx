@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { loginAction } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,17 +9,16 @@ import Link from "next/link";
 
 export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   async function handleSubmit(formData: FormData) {
-    setLoading(true);
-    setError(null);
-    const result = await loginAction(formData);
-    setLoading(false);
-    if (result?.error) {
-      setError(result.error);
-    }
-    // redirect() in server action handles success
+    startTransition(async () => {
+      setError(null);
+      const result = await loginAction(formData);
+      if (result?.error) {
+        setError(result.error);
+      }
+    });
   }
 
   return (
@@ -50,8 +49,13 @@ export default function LoginForm() {
             autoComplete="current-password"
           />
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Đang đăng nhập...
+              </>
+            ) : "Đăng nhập"}
           </Button>
         </form>
 

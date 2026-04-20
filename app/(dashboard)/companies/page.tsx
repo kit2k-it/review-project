@@ -29,8 +29,17 @@ export default async function CompaniesPage({
   const categories = await prisma.company.findMany({
     select: { category: true },
     distinct: ["category"],
-    where: { userId: user.id, isActive: true },
+    where: {
+      ...(user.role === "ADMIN"
+        ? {}
+        : user.role === "EMPLOYEE"
+        ? { employees: { some: { employeeId: user.id } } }
+        : { userId: user.id }),
+      isActive: true,
+    },
   });
+
+  const showAddButton = user.role === "ADMIN" || user.role === "CLIENT";
 
   const { companies, pagination } = await listCompaniesAction({
     search,
@@ -49,12 +58,14 @@ export default async function CompaniesPage({
         </div>
         <div className="flex items-center gap-3">
           <ShowInactiveToggle showInactive={includeInactive} />
-          <Link href="/companies/new">
-            <Button className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" />
-              Thêm khách hàng mới
-            </Button>
-          </Link>
+          {showAddButton && (
+            <Link href="/companies/new">
+              <Button className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" />
+                Thêm khách hàng mới
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

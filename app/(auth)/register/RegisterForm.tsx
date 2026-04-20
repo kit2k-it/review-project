@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { registerAction } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,14 +9,14 @@ import { Card, CardContent } from "@/components/ui/Card";
 
 export default function RegisterForm() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   async function handleSubmit(formData: FormData) {
-    setLoading(true);
-    setError(null);
-    const result = await registerAction(formData);
-    setLoading(false);
-    if (result?.error) setError(result.error);
+    startTransition(async () => {
+      setError(null);
+      const result = await registerAction(formData);
+      if (result?.error) setError(result.error);
+    });
   }
 
   return (
@@ -35,8 +35,13 @@ export default function RegisterForm() {
           <Input name="email" type="email" label="Email" placeholder="email@example.com" required />
           <Input name="password" type="password" label="Mật khẩu" placeholder="Tối thiểu 6 ký tự" required />
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Đang đăng ký..." : "Đăng ký"}
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Đang đăng ký...
+              </>
+            ) : "Đăng ký"}
           </Button>
         </form>
 

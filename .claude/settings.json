@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node fix-prisma.js)",
+      "Bash(rm -f fix-prisma.js)",
+      "Bash(ls prisma.config.js)",
+      "Bash(mkdir -p app/admin)",
+      "Bash(cp -r app/\\\\\\(admin\\\\\\)/* app/admin/)",
+      "Bash(cp -r app/\\\\\\(admin\\\\\\)/.* app/admin/)",
+      "Bash(mkdir -p app/employee)"
+    ]
+  }
+}

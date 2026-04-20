@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { reviewSubmitSchema } from "@/lib/validators";
 
@@ -321,10 +321,27 @@ export async function getPreGeneratedReviewsAction(params: {
 // GET COMPANY REVIEW POOL STATUS
 // ==========================================
 export async function getCompanyReviewPoolAction(companyId: string) {
-  const user = await requireAuth();
+  const session = await getSession();
+  if (!session?.user) return { error: "Chưa đăng nhập" };
 
   const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company || company.userId !== user.id) return { error: "Không có quyền" };
+  if (!company) return { error: "Công ty không tồn tại" };
+
+  // ADMIN sees all | CLIENT must own | EMPLOYEE must be assigned | USER denied
+  if (session.user.role !== "ADMIN") {
+    if (session.user.role === "CLIENT" && company.userId !== session.user.id) {
+      return { error: "Không có quyền" };
+    }
+    if (session.user.role === "EMPLOYEE") {
+      const assignment = await prisma.employeeAssignment.findFirst({
+        where: { employeeId: session.user.id, companyId },
+      });
+      if (!assignment) return { error: "Không có quyền" };
+    }
+    if (session.user.role === "USER") {
+      return { error: "Không có quyền" };
+    }
+  }
 
   const [available, used, pendingJob] = await Promise.all([
     prisma.preGeneratedReview.count({ where: { companyId, isUsed: false } }),

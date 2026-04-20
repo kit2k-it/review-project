@@ -16,12 +16,30 @@ export default async function DashboardPage() {
 
   const user = session.user;
 
+  // Build query filter based on role
+  let companyFilter: object = {};
+  let reviewFilter: object = {};
+
+  if (user.role === "ADMIN") {
+    // Admin sees all
+  } else if (user.role === "CLIENT") {
+    companyFilter = { userId: user.id };
+    reviewFilter = { company: { userId: user.id } };
+  } else if (user.role === "EMPLOYEE") {
+    // Employee sees companies they're assigned to
+    companyFilter = { employees: { some: { employeeId: user.id } } };
+    reviewFilter = { company: { employees: { some: { employeeId: user.id } } } };
+  } else {
+    companyFilter = { userId: user.id };
+    reviewFilter = { company: { userId: user.id } };
+  }
+
   const [companyCount, qrCount, reviewCount, recentReviews] = await Promise.all([
-    prisma.company.count({ where: { userId: user.id } }),
-    prisma.qrCode.count({ where: { company: { userId: user.id } } }),
-    prisma.review.count({ where: { company: { userId: user.id }, status: "SUBMITTED" } }),
+    prisma.company.count({ where: companyFilter }),
+    prisma.qrCode.count({ where: { company: companyFilter } }),
+    prisma.review.count({ where: { ...reviewFilter, status: "SUBMITTED" } }),
     prisma.review.findMany({
-      where: { company: { userId: user.id }, status: "SUBMITTED" },
+      where: { ...reviewFilter, status: "SUBMITTED" },
       include: { company: { select: { name: true } } },
       orderBy: { submittedAt: "desc" },
       take: 5,
@@ -33,6 +51,8 @@ export default async function DashboardPage() {
     { label: "Mã QR", value: qrCount, icon: QrCode, color: "text-secondary" },
     { label: "Đánh giá", value: reviewCount, icon: Star, color: "text-accent" },
   ];
+
+  const showCreateCompany = user.role === "ADMIN" || user.role === "CLIENT";
 
   return (
     <div className="space-y-6">
@@ -68,13 +88,15 @@ export default async function DashboardPage() {
             <CardTitle>Bắt đầu nhanh</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Link
-              href="/companies/new"
-              className="block rounded-lg border border-border p-4 hover:border-primary hover:bg-primary/5 transition-colors"
-            >
-              <p className="font-medium text-text">+ Thêm khách hàng mới</p>
-              <p className="text-sm text-gray-500">Tìm kiếm trên Google Maps</p>
-            </Link>
+            {showCreateCompany && (
+              <Link
+                href="/companies/new"
+                className="block rounded-lg border border-border p-4 hover:border-primary hover:bg-primary/5 transition-colors"
+              >
+                <p className="font-medium text-text">+ Thêm khách hàng mới</p>
+                <p className="text-sm text-gray-500">Tìm kiếm trên Google Maps</p>
+              </Link>
+            )}
             <Link
               href="/companies"
               className="block rounded-lg border border-border p-4 hover:border-primary hover:bg-primary/5 transition-colors"

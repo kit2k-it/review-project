@@ -42,9 +42,17 @@ export async function middleware(req: NextRequest) {
       throw new Error("Invalid token");
     }
 
-    // Admin route protection
-    if (pathname.startsWith("/admin") && payload.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/", req.url));
+    // Role-based route protection
+    const role = payload.role as string;
+
+    if (pathname.startsWith("/admin")) {
+      if (role !== "ADMIN") return NextResponse.redirect(new URL("/", req.url));
+    }
+
+    if (pathname.startsWith("/employee")) {
+      if (role !== "EMPLOYEE" && role !== "CLIENT" && role !== "ADMIN") {
+        return NextResponse.redirect(new URL("/", req.url));
+      }
     }
 
     return NextResponse.next();

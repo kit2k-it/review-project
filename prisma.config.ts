@@ -1,12 +1,12 @@
-import { config } from "dotenv";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
-config({ path: ".env.local" });
-config({ path: ".env" }); // Fallback
+const DATABASE_URL =
+  process.env.DATABASE_URL ??
+  "postgres://e73a7a7f4930bd80203d25fbbed14ab5d4665abb5f50158b1395395ee9170553:sk_2PzshNvOEDRRYTvwOg0_X@db.prisma.io:5432/postgres?sslmode=require";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    url: env("DATABASE_URL"),
+    url: DATABASE_URL,
   },
 });

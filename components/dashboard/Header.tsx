@@ -9,7 +9,16 @@ interface HeaderProps {
   sidebarOpen: boolean;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Quản trị viên",
+  CLIENT: "Khách hàng",
+  EMPLOYEE: "Nhân viên",
+  USER: "Người dùng",
+};
+
 export function Header({ user, onToggleSidebar }: HeaderProps) {
+  const roleLabel = ROLE_LABELS[user.role] || user.role;
+
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
       <div className="flex items-center gap-3">
@@ -22,9 +31,7 @@ export function Header({ user, onToggleSidebar }: HeaderProps) {
         </button>
         <div>
           <h1 className="text-base sm:text-lg font-semibold text-text">Xin chào, {user.name}</h1>
-          <p className="text-xs sm:text-sm text-gray-500">
-            {user.role === "ADMIN" ? "Quản trị viên" : "Người dùng"}
-          </p>
+          <p className="text-xs sm:text-sm text-gray-500">{roleLabel}</p>
         </div>
       </div>
     </header>

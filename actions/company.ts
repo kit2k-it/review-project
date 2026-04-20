@@ -156,8 +156,15 @@ export async function listCompaniesAction(params: {
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
 
+  let userFilter: object = { userId: user.id };
+  if (user.role === "ADMIN") {
+    userFilter = {}; // admin sees all
+  } else if (user.role === "EMPLOYEE") {
+    userFilter = { employees: { some: { employeeId: user.id } } };
+  }
+
   const where = {
-    userId: user.id,
+    ...userFilter,
     ...(params.includeInactive ? {} : { isActive: true }),
     ...(params.search && {
       OR: [

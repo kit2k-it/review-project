@@ -310,7 +310,12 @@ export default function NewCompanyPage() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={pending}>
-                {pending ? "Đang lưu..." : "Lưu khách hàng"}
+                {pending ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Đang lưu...
+                  </>
+                ) : "Lưu khách hàng"}
               </Button>
               <Link href="/companies" className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
                 Hủy

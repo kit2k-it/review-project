@@ -110,7 +110,7 @@ export async function registerAction(formData: FormData) {
 
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.create({
-    data: { email, name, passwordHash, role: "USER" },
+    data: { email, name, passwordHash, role: "CLIENT" },
   });
 
   redirect("/login");
@@ -120,6 +120,55 @@ export async function logoutAction() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
   redirect("/login");
+}
+
+// ==========================================
+// CHANGE PASSWORD (user changes their own password)
+// ==========================================
+export async function changePasswordAction(currentPassword: string, newPassword: string) {
+  const session = await getSession();
+  if (!session?.user) return { error: "Chưa đăng nhập" };
+
+  if (newPassword.length < 6) {
+    return { error: "Mật khẩu mới tối thiểu 6 ký tự" };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user) return { error: "Không tìm thấy tài khoản" };
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) return { error: "Mật khẩu hiện tại không đúng" };
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id: session.user.id }, data: { passwordHash: hash } });
+
+  return { success: true };
+}
+
+// ==========================================
+// RESET USER PASSWORD (admin only)
+// ==========================================
+export async function resetUserPasswordAction(userId: string, newPassword: string) {
+  const session = await getSession();
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return { error: "Không có quyền thực hiện" };
+  }
+
+  if (userId === session.user.id) {
+    return { error: "Không thể đặt lại mật khẩu của chính mình" };
+  }
+
+  if (newPassword.length < 6) {
+    return { error: "Mật khẩu tối thiểu 6 ký tự" };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return { error: "Tài khoản không tồn tại" };
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
+
+  return { success: true };
 }
 
 // ==========================================
@@ -140,6 +189,76 @@ export async function requireAdmin() {
     redirect("/login");
   }
   return session.user;
+}
+
+export async function requireClient() {
+  const session = await getSession();
+  if (!session?.user || (session.user.role !== "CLIENT" && session.user.role !== "ADMIN")) {
+    redirect("/login");
+  }
+  return session.user;
+}
+
+export async function requireEmployee() {
+  const session = await getSession();
+  if (!session?.user || !["EMPLOYEE", "CLIENT", "ADMIN"].includes(session.user.role)) {
+    redirect("/login");
+  }
+  return session.user;
+}
+
+// Check if user can manage a specific company
+// ADMIN: any company | CLIENT: own companies | EMPLOYEE: assigned companies
+export async function canManageCompany(companyId: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session?.user) return false;
+  if (session.user.role === "ADMIN") return true;
+  if (session.user.role === "CLIENT") {
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, userId: session.user.id },
+    });
+    return !!company;
+  }
+  if (session.user.role === "EMPLOYEE") {
+    const assignment = await prisma.employeeAssignment.findFirst({
+      where: { employeeId: session.user.id, companyId },
+    });
+    return !!assignment;
+  }
+  // USER: can see their own companies (detail only)
+  if (session.user.role === "USER") {
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, userId: session.user.id },
+    });
+    return !!company;
+  }
+  return false;
+}
+
+// Can VIEW a company (less strict than manage)
+export async function canViewCompany(companyId: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session?.user) return false;
+  if (session.user.role === "ADMIN") return true;
+  if (session.user.role === "CLIENT") {
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, userId: session.user.id },
+    });
+    return !!company;
+  }
+  if (session.user.role === "EMPLOYEE") {
+    const assignment = await prisma.employeeAssignment.findFirst({
+      where: { employeeId: session.user.id, companyId },
+    });
+    return !!assignment;
+  }
+  if (session.user.role === "USER") {
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, userId: session.user.id },
+    });
+    return !!company;
+  }
+  return false;
 }
 
 // ==========================================
