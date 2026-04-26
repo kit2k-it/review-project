@@ -1,13 +1,12 @@
 import { Metadata } from "next";
 import { listCompaniesAction } from "@/actions/company";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, hasPermission, getUserCompanies } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Building2, Plus } from "lucide-react";
 import { CompanyCard } from "./CompanyCard";
-import { ShowInactiveToggle } from "./ShowInactiveToggle";
 
 export const metadata: Metadata = { title: "Khách hàng — QRReview" };
 
@@ -16,38 +15,49 @@ export const revalidate = 30;
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; page?: string; includeInactive?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; page?: string; tab?: string }>;
 }) {
   const params = await searchParams;
   const search = params.q || "";
   const category = params.category || "";
   const page = Number(params.page) || 1;
-  const includeInactive = params.includeInactive === "1";
+  const tab = params.tab === "inactive" ? "inactive" : "active";
   const user = await requireAuth();
 
-  // Get all categories for filter (active only)
+  // Get all categories from companies user can access
+  const userCompanies = await getUserCompanies(user.id);
+  const companyIds = userCompanies.map(c => c.id);
+
   const categories = await prisma.company.findMany({
     select: { category: true },
     distinct: ["category"],
     where: {
-      ...(user.role === "ADMIN"
-        ? {}
-        : user.role === "EMPLOYEE"
-        ? { employees: { some: { employeeId: user.id } } }
-        : { userId: user.id }),
-      isActive: true,
+      id: { in: companyIds },
     },
   });
 
-  const showAddButton = user.role === "ADMIN" || user.role === "CLIENT";
+  // Check if user can add company (ADMIN or has companies:manage permission)
+  const canCreateCompany = user.role === "ADMIN" || await hasPermission(user.id, "companies:manage");
 
   const { companies, pagination } = await listCompaniesAction({
     search,
     category,
     page,
     pageSize: 20,
-    includeInactive,
+    status: tab === "inactive" ? "inactive" : "active",
   });
+
+  // Check manage permissions for all companies (parallel)
+  const { canManageCompany } = await import("@/lib/auth");
+  const companiesWithPermissions = await Promise.all(
+    companies.map(async (company) => ({
+      ...company,
+      canManage: await canManageCompany(company.id),
+    }))
+  );
+
+  const activeCount = userCompanies.filter(c => c.isActive).length;
+  const inactiveCount = userCompanies.filter(c => !c.isActive).length;
 
   return (
     <div className="space-y-6">
@@ -57,8 +67,7 @@ export default async function CompaniesPage({
           <p className="text-sm text-gray-500">Quản lý khách hàng và mã QR</p>
         </div>
         <div className="flex items-center gap-3">
-          <ShowInactiveToggle showInactive={includeInactive} />
-          {showAddButton && (
+          {canCreateCompany && (
             <Link href="/companies/new">
               <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4" />
@@ -67,6 +76,32 @@ export default async function CompaniesPage({
             </Link>
           )}
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-border">
+        <nav className="flex gap-4">
+          <Link
+            href={`/companies?tab=active${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              tab === "active"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Đang hoạt động ({activeCount})
+          </Link>
+          <Link
+            href={`/companies?tab=inactive${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              tab === "inactive"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Đã tắt ({inactiveCount})
+          </Link>
+        </nav>
       </div>
 
       {/* Filter bar */}
@@ -91,6 +126,7 @@ export default async function CompaniesPage({
                 </option>
               ))}
             </select>
+            <input type="hidden" name="tab" value={tab} />
             <Button type="submit" variant="outline" size="sm" className="sm:w-auto">
               Tìm kiếm
             </Button>
@@ -103,19 +139,25 @@ export default async function CompaniesPage({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Building2 className="h-12 w-12 text-gray-300 mb-4" />
-            <p className="text-lg font-medium text-gray-400">Chưa có khách hàng nào</p>
-            <p className="mb-4 text-sm text-gray-400">Bắt đầu bằng cách thêm khách hàng mới</p>
-            <Link href="/companies/new">
-              <Button size="sm">
-                <Plus className="h-4 w-4" /> Thêm khách hàng
-              </Button>
-            </Link>
+            <p className="text-lg font-medium text-gray-400">
+              {tab === "active" ? "Chưa có khách hàng nào đang hoạt động" : "Chưa có khách hàng nào bị tắt"}
+            </p>
+            <p className="mb-4 text-sm text-gray-400">
+              {tab === "active" ? "Bắt đầu bằng cách thêm khách hàng mới" : "Các khách hàng bị tắt sẽ hiển thị ở đây"}
+            </p>
+            {canCreateCompany && tab === "active" && (
+              <Link href="/companies/new">
+                <Button size="sm">
+                  <Plus className="h-4 w-4" /> Thêm khách hàng
+                </Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {companies.map((company) => (
-            <CompanyCard key={company.id} company={company} />
+          {companiesWithPermissions.map((company) => (
+            <CompanyCard key={company.id} company={company} canManage={company.canManage} />
           ))}
         </div>
       )}
@@ -126,7 +168,7 @@ export default async function CompaniesPage({
           {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
             <Link
               key={p}
-              href={`/companies?page=${p}&q=${search}&category=${category}${includeInactive ? "&includeInactive=1" : ""}`}
+              href={`/companies?page=${p}&q=${search}&category=${category}&tab=${tab}`}
               className={`rounded-md border px-3 py-1 text-sm ${
                 p === page ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-gray-50"
               }`}

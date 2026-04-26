@@ -1,7 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+console.log("DATABASE_URL:", process.env.DATABASE_URL ? "SET" : "NOT SET");
 
 async function main() {
   console.log("🌱 Seeding database...");
@@ -33,6 +34,73 @@ async function main() {
     },
   });
   console.log(`✅ Created demo user: ${user.email}`);
+
+  // Create demo EMPLOYEE
+  const employeePassword = await bcrypt.hash("employee123", 12);
+  const employee = await prisma.user.upsert({
+    where: { email: "employee@qrreview.vn" },
+    update: {},
+    create: {
+      email: "employee@qrreview.vn",
+      name: "Nhân viên A",
+      passwordHash: employeePassword,
+      role: "EMPLOYEE",
+    },
+  });
+  console.log(`✅ Created employee: ${employee.email}`);
+
+  // Create demo CLIENT
+  const clientPassword = await bcrypt.hash("client123", 12);
+  const client = await prisma.user.upsert({
+    where: { email: "client@qrreview.vn" },
+    update: {},
+    create: {
+      email: "client@qrreview.vn",
+      name: "Khách hàng A",
+      passwordHash: clientPassword,
+      role: "CLIENT",
+    },
+  });
+  console.log(`✅ Created client: ${client.email}`);
+
+  // Seed permissions
+  const permissions = [
+    // Global permissions (không cần companyId)
+    { code: "companies:manage", name: "Quản lý doanh nghiệp & phân quyền" },
+    { code: "qr-codes:manage", name: "Quản lý mã QR" },
+    { code: "reviews:manage", name: "Quản lý đánh giá" },
+
+    // Resource-specific permissions (có thể gán theo từng công ty)
+    { code: "companies:read", name: "Xem danh sách công ty" },
+    { code: "qr-codes:read", name: "Xem danh sách mã QR" },
+    { code: "reviews:read", name: "Xem đánh giá" },
+  ];
+
+  for (const perm of permissions) {
+    await prisma.permission.upsert({
+      where: { code: perm.code },
+      update: {},
+      create: perm,
+    });
+  }
+  console.log(`✅ Seeded ${permissions.length} permissions`);
+
+  // Grant admin all global permissions
+  const globalPermissionCodes = ["companies:manage", "qr-codes:manage", "reviews:manage"];
+  for (const permCode of globalPermissionCodes) {
+    const perm = await prisma.permission.findUnique({ where: { code: permCode } });
+    if (perm) {
+      const existing = await prisma.userPermission.findFirst({
+        where: { userId: admin.id, permissionId: perm.id, companyId: null },
+      });
+      if (!existing) {
+        await prisma.userPermission.create({
+          data: { userId: admin.id, permissionId: perm.id },
+        });
+      }
+    }
+  }
+  console.log(`✅ Granted admin global permissions`);
 
   // Create demo company
   const company = await prisma.company.upsert({

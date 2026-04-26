@@ -17,6 +17,7 @@ interface ReviewItemActionsProps {
   initialRating: number;
   isActive: boolean;
   isUsed: boolean;
+  canManage?: boolean;
 }
 
 export function ReviewItemActions({
@@ -26,6 +27,7 @@ export function ReviewItemActions({
   initialRating,
   isActive,
   isUsed,
+  canManage = true,
 }: ReviewItemActionsProps) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -34,6 +36,10 @@ export function ReviewItemActions({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState(false);
+
+  if (!canManage) {
+    return null;
+  }
 
   async function handleUpdate(e: React.SubmitEvent) {
     e.preventDefault();

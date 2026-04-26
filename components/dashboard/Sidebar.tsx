@@ -12,6 +12,7 @@ import {
   Users,
   UserRound,
   User,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +20,14 @@ const navItemsByRole: Record<string, { href: string; label: string; icon: React.
   ADMIN: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },
     { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
+    { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
     { href: "/companies", label: "Khách hàng", icon: Building2 },
     { href: "/reviews", label: "Đánh giá", icon: Star },
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
   ],
   CLIENT: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },
     { href: "/companies", label: "Khách hàng", icon: Building2 },
-    { href: "/employees", label: "Nhân viên", icon: UserRound },
     { href: "/reviews", label: "Đánh giá", icon: Star },
   ],
   EMPLOYEE: [

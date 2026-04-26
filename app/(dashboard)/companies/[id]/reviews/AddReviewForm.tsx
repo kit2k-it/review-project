@@ -9,9 +9,10 @@ import { X, Star, Plus } from "lucide-react";
 
 interface AddReviewFormProps {
   companyId: string;
+  canManage?: boolean;
 }
 
-export function AddReviewForm({ companyId }: AddReviewFormProps) {
+export function AddReviewForm({ companyId, canManage = true }: AddReviewFormProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [rating, setRating] = useState(5);
@@ -44,6 +45,7 @@ export function AddReviewForm({ companyId }: AddReviewFormProps) {
   }
 
   if (!isOpen) {
+    if (!canManage) return null;
     return (
       <Button onClick={() => setIsOpen(true)} variant="outline" className="gap-2">
         <Plus className="h-4 w-4" />

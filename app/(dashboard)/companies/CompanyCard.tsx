@@ -16,9 +16,10 @@ interface CompanyCardProps {
     isActive: boolean;
     _count: { qrCodes: number; reviews: number };
   };
+  canManage?: boolean;
 }
 
-export function CompanyCard({ company }: CompanyCardProps) {
+export function CompanyCard({ company, canManage }: CompanyCardProps) {
   return (
     <Card className={`group relative overflow-hidden ${!company.isActive ? "opacity-60" : ""}`}>
       <Link href={`/companies/${company.id}`} className="block cursor-pointer">
@@ -65,21 +66,23 @@ export function CompanyCard({ company }: CompanyCardProps) {
           </div>
         </CardContent>
       </Link>
-      <div className="absolute bottom-3 right-3 flex gap-2">
-        <Link
-          href={`/companies/${company.id}/qr-codes`}
-          className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-        >
-          Mã QR
-        </Link>
-        <Link
-          href={`/companies/${company.id}/edit`}
-          className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-        >
-          Sửa
-        </Link>
-        <ToggleCompanyActiveButton id={company.id} isActive={company.isActive} />
-      </div>
+      {canManage && (
+        <div className="absolute bottom-3 right-3 flex gap-2">
+          <Link
+            href={`/companies/${company.id}/qr-codes`}
+            className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+          >
+            Mã QR
+          </Link>
+          <Link
+            href={`/companies/${company.id}/edit`}
+            className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+          >
+            Sửa
+          </Link>
+          <ToggleCompanyActiveButton id={company.id} isActive={company.isActive} />
+        </div>
+      )}
     </Card>
   );
 }

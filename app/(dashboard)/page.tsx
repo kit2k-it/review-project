@@ -26,9 +26,9 @@ export default async function DashboardPage() {
     companyFilter = { userId: user.id };
     reviewFilter = { company: { userId: user.id } };
   } else if (user.role === "EMPLOYEE") {
-    // Employee sees companies they're assigned to
-    companyFilter = { employees: { some: { employeeId: user.id } } };
-    reviewFilter = { company: { employees: { some: { employeeId: user.id } } } };
+    // Employee sees companies they have permissions for (via UserPermission)
+    companyFilter = { userPermissions: { some: { userId: user.id } } };
+    reviewFilter = { company: { userPermissions: { some: { userId: user.id } } } };
   } else {
     companyFilter = { userId: user.id };
     reviewFilter = { company: { userId: user.id } };

@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { getSession, canViewCompany, canManageCompany } from "@/lib/auth";
 import { getCompanyReviewPoolAction, getPreGeneratedReviewsAction } from "@/actions/review";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -21,10 +21,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ReviewsPoolPage({ params }: Props) {
   const { id } = await params;
-  const user = await requireAuth();
+  const session = await getSession();
+  if (!session?.user) notFound();
+
+  // Check access
+  const canView = await canViewCompany(id);
+  if (!canView) notFound();
+
+  const canManage = await canManageCompany(id);
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company || company.userId !== user.id) notFound();
+  if (!company) notFound();
 
   const [reviewsResult, pool] = await Promise.all([
     getPreGeneratedReviewsAction({ companyId: id, pageSize: 30 }),
@@ -105,7 +112,7 @@ export default async function ReviewsPoolPage({ params }: Props) {
       </Card>
 
       {/* Add Review */}
-      <AddReviewForm companyId={id} />
+      <AddReviewForm companyId={id} canManage={canManage} />
 
       {/* Reviews list */}
       {reviews.length === 0 ? (
@@ -163,6 +170,7 @@ export default async function ReviewsPoolPage({ params }: Props) {
                     initialRating={review.rating}
                     isActive={review.isActive}
                     isUsed={review.isUsed}
+                    canManage={canManage}
                   />
                 </div>
               </CardContent>

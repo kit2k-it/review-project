@@ -14,11 +14,19 @@ export default async function ReviewsPage({
   searchParams: Promise<{ status?: string; page?: string }>;
 }) {
   const params = await searchParams;
-  const { reviews, pagination } = await getReviewsAction({
+  const result = await getReviewsAction({
     status: params.status || undefined,
     page: Number(params.page) || 1,
     pageSize: 20,
   });
+
+  const reviews = result?.reviews ?? [];
+  const pagination = result?.pagination ?? {
+    page: Number(params.page) || 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+  };
 
   const statusColors: Record<string, "success" | "warning" | "default"> = {
     SUBMITTED: "success",

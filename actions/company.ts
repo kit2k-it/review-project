@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { companySchema } from "@/lib/validators";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, hasPermission, isCompanyOwner, getUserCompanies } from "@/lib/auth";
 import { generateReviewsForCompany } from "./review";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -15,6 +15,12 @@ export async function createCompanyAction(
   data: { name: string; address: string; category: string; phone: string; keywords: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
 ) {
   const user = await requireAuth();
+
+  // Check permission: ADMIN or has global companies:manage
+  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  if (user.role !== "ADMIN" && !hasGlobalManage) {
+    return { error: "Không có quyền tạo khách hàng" };
+  }
 
   const raw = {
     name: data.name,
@@ -73,9 +79,13 @@ export async function updateCompanyAction(
 ) {
   const user = await requireAuth();
 
-  const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return { error: "Khách hàng không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền chỉnh sửa" };
+  // Check if user has global companies:manage permission OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  const isOwner = await isCompanyOwner(user.id, id);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền chỉnh sửa" };
+  }
 
   const raw = {
     name: data.name,
@@ -128,9 +138,16 @@ export async function updateCompanyAction(
 export async function toggleCompanyActiveAction(id: string) {
   const user = await requireAuth();
 
+  // Check if user has global companies:manage permission OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  const isOwner = await isCompanyOwner(user.id, id);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền thao tác" };
+  }
+
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company) return { error: "Khách hàng không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền thao tác" };
 
   await prisma.company.update({
     where: { id },
@@ -143,6 +160,26 @@ export async function toggleCompanyActiveAction(id: string) {
 }
 
 // ==========================================
+// DELETE COMPANY
+// ==========================================
+export async function deleteCompanyAction(id: string) {
+  const user = await requireAuth();
+
+  // Check if user has global companies:manage permission OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  const isOwner = await isCompanyOwner(user.id, id);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền xóa" };
+  }
+
+  await prisma.company.delete({ where: { id } });
+
+  revalidatePath("/companies");
+  return { success: true };
+}
+
+// ==========================================
 // LIST COMPANIES
 // ==========================================
 export async function listCompaniesAction(params: {
@@ -150,22 +187,36 @@ export async function listCompaniesAction(params: {
   category?: string;
   page?: number;
   pageSize?: number;
-  includeInactive?: boolean;
+  status?: "active" | "inactive" | "all";
 }) {
   const user = await requireAuth();
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
 
-  let userFilter: object = { userId: user.id };
+  // Determine which companies user can see
+  let userCompanyIds: string[];
   if (user.role === "ADMIN") {
-    userFilter = {}; // admin sees all
-  } else if (user.role === "EMPLOYEE") {
-    userFilter = { employees: { some: { employeeId: user.id } } };
+    // Admin sees all
+    const all = await prisma.company.findMany({ select: { id: true } });
+    userCompanyIds = all.map(c => c.id);
+  } else {
+    // Check if user has global companies:manage permission
+    const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+    if (hasGlobalManage) {
+      // Global manage can see all companies
+      const all = await prisma.company.findMany({ select: { id: true } });
+      userCompanyIds = all.map(c => c.id);
+    } else {
+      // Otherwise, only companies they own or have companies:read permission for
+      userCompanyIds = (await getUserCompanies(user.id)).map(c => c.id);
+    }
   }
 
-  const where = {
-    ...userFilter,
-    ...(params.includeInactive ? {} : { isActive: true }),
+  // Build where clause
+  const where: any = {
+    id: { in: userCompanyIds },
+    ...(params.status === "active" ? { isActive: true } : {}),
+    ...(params.status === "inactive" ? { isActive: false } : {}),
     ...(params.search && {
       OR: [
         { name: { contains: params.search, mode: "insensitive" as const } },

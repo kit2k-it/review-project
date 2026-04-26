@@ -1,5 +1,6 @@
 "use client";
 
+import type { Company } from "@prisma/client";
 import { useState } from "react";
 import { updateCompanyAction } from "@/actions/company";
 import { Button } from "@/components/ui/Button";
@@ -9,20 +10,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Pencil, X, Check, Loader2, MapPin, Phone, ExternalLink, Tag, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-interface Company {
-  id: string;
-  name: string;
-  address: string;
-  category: string;
-  phone: string | null;
-  keywords: string | null;
-  googleMapsUrl: string | null;
-  googleReviewUrl: string | null;
-  hashtags: string | null;
-  complaintEmail: string | null;
+interface Props {
+  company: Company;
+  canManage: boolean;
 }
 
-export default function CompanyDetailEdit({ company }: { company: Company }) {
+export default function CompanyDetailEdit({ company, canManage }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -85,7 +78,7 @@ export default function CompanyDetailEdit({ company }: { company: Company }) {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle>Thông tin</CardTitle>
-        {!editing && (
+        {!editing && canManage && (
           <button
             onClick={() => setEditing(true)}
             className="flex items-center gap-1 text-xs text-primary hover:underline"

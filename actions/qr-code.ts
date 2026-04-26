@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { generateQrCode } from "@/lib/utils";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, hasPermission, isCompanyOwner } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
 // ==========================================
@@ -14,10 +14,16 @@ export async function createQrCodeAction(
 ) {
   const user = await requireAuth();
 
-  // Verify ownership
   const company = await prisma.company.findUnique({ where: { id: companyId } });
   if (!company) return { error: "Khách hàng không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền" };
+
+  // Check permission: global qr-codes:manage OR is owner of company
+  const hasGlobalManage = await hasPermission(user.id, "qr-codes:manage");
+  const isOwner = await isCompanyOwner(user.id, companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền tạo mã QR" };
+  }
 
   // Generate unique code
   let code = generateQrCode();
@@ -53,7 +59,14 @@ export async function deleteQrCodeAction(id: string) {
   });
 
   if (!qrCode) return { error: "Mã QR không tồn tại" };
-  if (qrCode.company.userId !== user.id) return { error: "Không có quyền" };
+
+  // Check permission: global qr-codes:manage OR is owner of company
+  const hasGlobalManage = await hasPermission(user.id, "qr-codes:manage");
+  const isOwner = await isCompanyOwner(user.id, qrCode.companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền" };
+  }
 
   await prisma.qrCode.delete({ where: { id } });
 
@@ -73,7 +86,14 @@ export async function toggleQrCodeAction(id: string) {
   });
 
   if (!qrCode) return { error: "Mã QR không tồn tại" };
-  if (qrCode.company.userId !== user.id) return { error: "Không có quyền" };
+
+  // Check permission: global qr-codes:manage OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "qr-codes:manage");
+  const isOwner = await isCompanyOwner(user.id, qrCode.companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền" };
+  }
 
   await prisma.qrCode.update({
     where: { id },
@@ -91,7 +111,15 @@ export async function listQrCodesAction(companyId: string) {
   const user = await requireAuth();
 
   const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company || company.userId !== user.id) return { error: "Không có quyền" };
+  if (!company) return { error: "Khách hàng không tồn tại" };
+
+  // Check permission: global qr-codes:manage OR is owner of company
+  const hasGlobalManage = await hasPermission(user.id, "qr-codes:manage");
+  const isOwner = await isCompanyOwner(user.id, companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền" };
+  }
 
   const qrCodes = await prisma.qrCode.findMany({
     where: { companyId },

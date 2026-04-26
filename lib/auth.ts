@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { hasPermission, isCompanyOwner, getUserCompanies } from "./permissions";
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "fallback-secret-change-in-production"
@@ -208,58 +209,50 @@ export async function requireEmployee() {
 }
 
 // Check if user can manage a specific company
-// ADMIN: any company | CLIENT: own companies | EMPLOYEE: assigned companies
+// ADMIN: any company | Others: global companies:manage OR ownership
 export async function canManageCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
+
+  // ADMIN always can manage
   if (session.user.role === "ADMIN") return true;
-  if (session.user.role === "CLIENT") {
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, userId: session.user.id },
-    });
-    return !!company;
-  }
-  if (session.user.role === "EMPLOYEE") {
-    const assignment = await prisma.employeeAssignment.findFirst({
-      where: { employeeId: session.user.id, companyId },
-    });
-    return !!assignment;
-  }
-  // USER: can see their own companies (detail only)
-  if (session.user.role === "USER") {
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, userId: session.user.id },
-    });
-    return !!company;
-  }
-  return false;
+
+  // Check if user has GLOBAL manage permission
+  const hasGlobalManage = await hasPermission(session.user.id, "companies:manage");
+  if (hasGlobalManage) return true;
+
+  // Check if user is owner
+  const isOwner = await isCompanyOwner(session.user.id, companyId);
+
+  return isOwner;
 }
 
 // Can VIEW a company (less strict than manage)
+// ADMIN: any company | Others: global companies:read or companies:manage OR ownership
 export async function canViewCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
+
+  // ADMIN always can view
   if (session.user.role === "ADMIN") return true;
-  if (session.user.role === "CLIENT") {
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, userId: session.user.id },
-    });
-    return !!company;
-  }
-  if (session.user.role === "EMPLOYEE") {
-    const assignment = await prisma.employeeAssignment.findFirst({
-      where: { employeeId: session.user.id, companyId },
-    });
-    return !!assignment;
-  }
-  if (session.user.role === "USER") {
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, userId: session.user.id },
-    });
-    return !!company;
-  }
-  return false;
+
+  // Check if user has GLOBAL read or manage permission
+  const hasGlobalRead = await hasPermission(session.user.id, "companies:read");
+  const hasGlobalManage = await hasPermission(session.user.id, "companies:manage");
+  if (hasGlobalRead || hasGlobalManage) return true;
+
+  // Check if user is owner
+  const isOwner = await isCompanyOwner(session.user.id, companyId);
+
+  return isOwner;
 }
+
+// Export permission helpers for convenience
+export { hasPermission, isCompanyOwner, getUserCompanies };
+
+// ==========================================
+// MIDDLEWARE JWT VERIFY (separate file to avoid bundling jose in client)
+// ==========================================
 
 // ==========================================
 // MIDDLEWARE JWT VERIFY (separate file to avoid bundling jose in client)

@@ -1,8 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
 import { requireAdmin, requireClient, getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -95,6 +95,11 @@ export async function createUserAction(data: z.infer<typeof createUserSchema>) {
     const client = await requireClient();
     creatorId = client.id;
     creatorRole = client.role;
+    // Check permission: need user:create global permission
+    const hasCreatePerm = await hasPermission(client.id, "user:create");
+    if (!hasCreatePerm) {
+      return { error: "Không có quyền tạo tài khoản" };
+    }
     if (parsed.data.role !== "EMPLOYEE") {
       return { error: "Chỉ quản trị viên mới có thể tạo tài khoản vai trò này" };
     }
@@ -151,188 +156,6 @@ export async function deleteUserAction(userId: string) {
   await prisma.user.delete({ where: { id: userId } });
   revalidatePath("/admin/users");
   return { success: true };
-}
-
-// ==========================================
-// ASSIGN EMPLOYEE TO COMPANY
-// Admin: any employee → any company
-// Client: only EMPLOYEES they created → their own companies
-// ==========================================
-export async function assignEmployeeToCompanyAction(employeeId: string, companyId: string) {
-  let creatorId: string | null = null;
-  let creatorRole: string | null = null;
-  try {
-    creatorRole = (await requireAdmin()).role;
-  } catch {
-    const client = await requireClient();
-    creatorId = client.id;
-    creatorRole = client.role;
-  }
-
-  const employee = await prisma.user.findUnique({ where: { id: employeeId } });
-  if (!employee) return { error: "Tài khoản nhân viên không tồn tại" };
-  if ((employee.role as string) !== "EMPLOYEE") {
-    return { error: "Chỉ tài khoản nhân viên mới có thể được gán" };
-  }
-
-  if (creatorRole === "CLIENT" && (employee as any).createdById !== creatorId) {
-    return { error: "Bạn chỉ có thể gán nhân viên mà bạn tạo" };
-  }
-
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) return { error: "Công ty không tồn tại" };
-
-  if (creatorRole === "CLIENT" && company.userId !== creatorId) {
-    return { error: "Bạn chỉ có thể gán nhân viên vào công ty của bạn" };
-  }
-
-  try {
-    await prisma.employeeAssignment.create({ data: { employeeId, companyId } });
-  } catch {
-    // Already assigned
-  }
-  revalidatePath(`/companies/${companyId}`);
-  return { success: true };
-}
-
-// ==========================================
-// REMOVE EMPLOYEE FROM COMPANY
-// ==========================================
-export async function removeEmployeeFromCompanyAction(employeeId: string, companyId: string) {
-  let creatorId: string | null = null;
-  let creatorRole: string | null = null;
-  try {
-    creatorRole = (await requireAdmin()).role;
-  } catch {
-    const client = await requireClient();
-    creatorId = client.id;
-    creatorRole = client.role;
-  }
-
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) return { error: "Công ty không tồn tại" };
-
-  if (creatorRole === "CLIENT" && company.userId !== creatorId) {
-    return { error: "Không có quyền gỡ nhân viên khỏi công ty này" };
-  }
-
-  await prisma.employeeAssignment.deleteMany({ where: { employeeId, companyId } });
-  revalidatePath(`/companies/${companyId}`);
-  return { success: true };
-}
-
-// ==========================================
-// GET EMPLOYEES OF A COMPANY
-// ==========================================
-export async function getCompanyEmployeesAction(companyId: string) {
-  let creatorId: string | null = null;
-  try {
-    await requireAdmin();
-  } catch {
-    try {
-      creatorId = (await requireClient()).id;
-    } catch {
-      // EMPLOYEE is allowed to view employees — skip creatorId check
-    }
-  }
-
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) return [];
-
-  if (creatorId && company.userId !== creatorId) return [];
-
-  return prisma.employeeAssignment.findMany({
-    where: { companyId },
-    include: {
-      employee: {
-        select: { id: true, email: true, name: true, createdAt: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-// ==========================================
-// GET MY EMPLOYEES (for Client: only ones they created)
-// ==========================================
-export async function getMyEmployeesAction() {
-  const client = await requireClient();
-
-  return prisma.user.findMany({
-    where: { role: "EMPLOYEE" as any, createdById: client.id },
-    select: { id: true, name: true, email: true },
-    orderBy: { name: "asc" },
-  });
-}
-
-// ==========================================
-// GET ALL EMPLOYEES (for Client: only their created ones)
-// ==========================================
-export async function getAllEmployeesAction() {
-  let creatorId: string | null = null;
-  try {
-    creatorId = (await requireAdmin()).id;
-  } catch {
-    try {
-      creatorId = (await requireClient()).id;
-    } catch {
-      // EMPLOYEE is allowed — skip creatorId filter
-    }
-  }
-
-  // Admin: all | Client: only their created | Employee: all (for assignment)
-  const where = creatorId
-    ? { role: Role.EMPLOYEE, createdById: creatorId }
-    : { role: Role.EMPLOYEE };
-
-  return prisma.user.findMany({
-    where,
-    select: { id: true, name: true, email: true },
-    orderBy: { name: "asc" },
-  });
-}
-
-// ==========================================
-// UPDATE EMPLOYEE (Admin: any | Client: only their created)
-// ==========================================
-export async function updateEmployeeAction(
-  employeeId: string,
-  data: { name?: string; email?: string; password?: string }
-) {
-  let creatorId: string | null = null;
-  let creatorRole: string | null = null;
-  try {
-    creatorRole = (await requireAdmin()).role;
-  } catch {
-    const client = await requireClient();
-    creatorId = client.id;
-    creatorRole = client.role;
-  }
-
-  const employee = await prisma.user.findUnique({ where: { id: employeeId } });
-  if (!employee) return { error: "Tài khoản nhân viên không tồn tại" };
-
-  if (creatorRole === "CLIENT" && (employee as any).createdById !== creatorId) {
-    return { error: "Bạn không có quyền chỉnh sửa tài khoản này" };
-  }
-
-  const updateData: { name?: string; email?: string; passwordHash?: string } = {};
-
-  if (data.name) updateData.name = data.name;
-  if (data.email) updateData.email = data.email;
-  if (data.password) updateData.passwordHash = await bcrypt.hash(data.password, 12);
-
-  if (Object.keys(updateData).length === 0) {
-    return { error: "Không có thông tin nào được cập nhật" };
-  }
-
-  try {
-    await prisma.user.update({ where: { id: employeeId }, data: updateData });
-    revalidatePath("/employees");
-    return { success: true };
-  } catch {
-    return { error: "Không thể cập nhật tài khoản" };
-  }
 }
 
 // ==========================================
