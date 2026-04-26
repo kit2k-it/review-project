@@ -19,11 +19,11 @@ import { cn } from "@/lib/utils";
 const navItemsByRole: Record<string, { href: string; label: string; icon: React.ElementType }[]> = {
   ADMIN: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },
-    { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
-    { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
     { href: "/companies", label: "Khách hàng", icon: Building2 },
     { href: "/reviews", label: "Đánh giá", icon: Star },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
+    { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
   ],
   CLIENT: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },

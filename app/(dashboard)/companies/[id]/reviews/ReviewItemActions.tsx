@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import {
   updatePreGeneratedReviewAction,
   togglePreGeneratedReviewActiveAction,
+  resetUsedReviewAction,
 } from "@/actions/review";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
-import { X, Pencil, Power, PowerOff } from "lucide-react";
+import { X, Pencil, Power, PowerOff, RefreshCw } from "lucide-react";
 
 interface ReviewItemActionsProps {
   reviewId: string;
@@ -36,6 +37,7 @@ export function ReviewItemActions({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   if (!canManage) {
     return null;
@@ -75,6 +77,20 @@ export function ReviewItemActions({
     setContent(initialContent);
     setRating(initialRating);
     setError("");
+  }
+
+  async function handleReset() {
+    if (!confirm("Đặt lại trạng thái 'đã dùng'? Đánh giá này sẽ có sẵn để sử dụng lại.")) {
+      return;
+    }
+    setResetting(true);
+    const result = await resetUsedReviewAction(reviewId);
+    setResetting(false);
+    if (result && "error" in result) {
+      alert((result as { error: string }).error);
+    } else {
+      router.refresh();
+    }
   }
 
   if (editing) {
@@ -149,6 +165,23 @@ export function ReviewItemActions({
         )}
         {isActive ? "Tắt" : "Bật"}
       </Button>
+      {isUsed && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs text-amber-600 hover:text-amber-700"
+          onClick={handleReset}
+          disabled={resetting}
+          title="Đặt lại trạng thái để dùng lại"
+        >
+          {resetting ? (
+            <div className="h-3 w-3 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          Reset
+        </Button>
+      )}
     </div>
   );
 }

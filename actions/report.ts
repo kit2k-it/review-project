@@ -98,6 +98,33 @@ function buildCompanyWhereClause(companyFilter: any): any {
 }
 
 /**
+ * Convert companyFilter to a Prisma where clause for Company model's id field
+ */
+function buildCompanyIdWhere(companyFilter: any): any {
+  // No access - return empty where clause
+  if (companyFilter.id === null) {
+    return { id: null }; // forces empty result
+  }
+
+  // All companies (empty filter)
+  if (companyFilter.companyId === undefined && companyFilter.companyId?.in === undefined) {
+    return {};
+  }
+
+  // Specific company
+  if (companyFilter.companyId) {
+    return { id: companyFilter.companyId };
+  }
+
+  // Array of companies
+  if (companyFilter.companyId?.in) {
+    return { id: { in: companyFilter.companyId.in } };
+  }
+
+  return {};
+}
+
+/**
  * Parse date range with defaults
  */
 function parseDateRange(params?: ReportParams): { from: Date; to: Date } {
@@ -161,11 +188,11 @@ export async function getReportOverview(params?: ReportParams): Promise<{
       orderBy: { role: "asc" },
     }),
     // Total companies (filtered by permission)
-    prisma.company.count({ where: companyFilter }),
+    prisma.company.count({ where: buildCompanyIdWhere(companyFilter) }),
     // Active companies
-    prisma.company.count({ where: { ...companyFilter, isActive: true } }),
+    prisma.company.count({ where: { ...buildCompanyIdWhere(companyFilter), isActive: true } }),
     // Inactive companies
-    prisma.company.count({ where: { ...companyFilter, isActive: false } }),
+    prisma.company.count({ where: { ...buildCompanyIdWhere(companyFilter), isActive: false } }),
     // Total QR codes (filtered by company)
     companyFilter.id === null
       ? Promise.resolve(0)
@@ -276,7 +303,7 @@ export async function getTimeSeriesData(params?: ReportParams): Promise<{
   const companiesByDay = await prisma.company.groupBy({
     by: ["createdAt"],
     where: {
-      ...companyFilter,
+      ...buildCompanyIdWhere(companyFilter),
       createdAt: { gte: from, lte: to },
     },
     _count: { id: true },

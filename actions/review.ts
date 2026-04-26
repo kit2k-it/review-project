@@ -562,3 +562,43 @@ export async function togglePreGeneratedReviewActiveAction(reviewId: string) {
 
   return { success: true, review: updated };
 }
+
+// ==========================================
+// RESET USED REVIEW (make it available again)
+// ==========================================
+export async function resetUsedReviewAction(reviewId: string) {
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  // Check permission: global reviews:manage OR owner of company
+  const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+  const isOwner = review.company.userId === userId;
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền thao tác với đánh giá này" };
+  }
+
+  if (!review.isUsed) {
+    return { error: "Đánh giá này chưa được sử dụng" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: reviewId },
+    data: { isUsed: false, usedAt: null },
+  });
+
+  return { success: true, review: updated };
+}

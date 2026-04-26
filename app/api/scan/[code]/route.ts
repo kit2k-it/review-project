@@ -57,14 +57,18 @@ export async function GET(
 
   const company = qrCode.company;
 
-  // Strategy 1: Try to get an unused + active pre-generated review (FIFO: oldest first)
+  // Strategy 1: Try to get an unused + active pre-generated review
+  // Prioritize manual reviews first (isManuallyCreated = true), then AI-generated
   const preGenReview = await prisma.preGeneratedReview.findFirst({
     where: {
       companyId: company.id,
       isUsed: false,
       isActive: true,
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [
+      { isManuallyCreated: "desc" }, // Manual reviews first
+      { createdAt: "asc" }, // Then FIFO within each type
+    ],
   });
 
   let reviewContent: string;
