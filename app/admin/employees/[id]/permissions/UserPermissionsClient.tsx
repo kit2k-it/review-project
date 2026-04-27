@@ -153,9 +153,9 @@ export default function UserPermissionsClient({
                     />
                     <div className="flex-1">
                       <label htmlFor={`perm-${perm.id}`} className="font-medium cursor-pointer">
-                        {perm.code}
+                        {perm.name}
                       </label>
-                      <p className="text-sm text-gray-500">{perm.name}</p>
+                      <p className="text-sm text-gray-500">{perm.code}</p>
                     </div>
                   </div>
                 );
@@ -195,8 +195,8 @@ export default function UserPermissionsClient({
                   <li key={perm.id} className="text-sm flex items-start gap-2">
                     <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <span className="font-medium">{perm.code}</span>
-                      <p className="text-xs text-gray-500">{perm.name}</p>
+                      <span className="font-medium">{perm.name}</span>
+                      <p className="text-xs text-gray-500">{perm.code}</p>
                     </div>
                   </li>
                 ))}

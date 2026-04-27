@@ -21,18 +21,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CompanyDetailPage({ params }: Props) {
   const { id } = await params;
+  console.log('[CompanyDetailPage] Requested company ID:', id);
 
   const session = await getSession();
   if (!session?.user) {
+    console.log('[CompanyDetailPage] No session - notFound');
     notFound();
   }
 
   const userId = session.user.id;
   const userRole = session.user.role;
+  console.log('[CompanyDetailPage] User:', userId, 'role:', userRole);
 
   // Check access
   const canView = await canViewCompany(id);
-  if (!canView) notFound();
+  console.log('[CompanyDetailPage] canView result:', canView);
+  if (!canView) {
+    console.log('[CompanyDetailPage] Access denied - notFound');
+    notFound();
+  }
 
   // Check if user can manage this company
   const canManage = await canManageCompany(id);
@@ -59,12 +66,18 @@ export default async function CompanyDetailPage({ params }: Props) {
     }) as any,
   ]);
 
-  if (!company) notFound();
+  console.log('[CompanyDetailPage] Company query result:', company ? 'FOUND' : 'NOT FOUND');
+  if (!company) {
+    console.log('[CompanyDetailPage] Company not found - notFound');
+    notFound();
+  }
   if ("error" in poolResult) notFound();
   const pool = poolResult as { available: number; used: number; pendingJob: boolean };
 
   // Group assigned users by permission type
-  const usersWithAccess = (assignedUsers as any[]).filter(up => up.permission.code === "companies:read");
+  const usersWithAccess = (assignedUsers as any[]).filter(up =>
+    up.permission.code === "companies:read" || up.permission.code === "companies:manage"
+  );
 
   // Check if current user can assign access
   const canAssignAccess = userRole === "ADMIN" || await canManageCompany(id);

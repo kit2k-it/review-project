@@ -20,16 +20,19 @@ export default async function AdminEmployeesPage() {
       name: true,
       role: true,
       createdAt: true,
-      _count: {
+      companies: {
         select: {
-          companies: true,
+          id: true,
         },
       },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  // Get permissions for each user
+  // Get total companies count for reference
+  const totalCompanies = await prisma.company.count();
+
+  // Get all permissions for these users
   const usersWithPerms = await Promise.all(
     users.map(async (user) => {
       const perms = await prisma.userPermission.findMany({
@@ -39,6 +42,7 @@ export default async function AdminEmployeesPage() {
           company: {
             select: {
               name: true,
+              id: true,
             },
           },
         },
@@ -50,6 +54,78 @@ export default async function AdminEmployeesPage() {
       };
     })
   );
+
+  // Helper function to count accessible companies for a user
+  const getAccessibleCompanyCount = (user: typeof usersWithPerms[0]) => {
+    // If user is ADMIN (shouldn't be in this list, but just in case)
+    if (user.role === "ADMIN") {
+      return totalCompanies;
+    }
+
+    // Check if user has global companies:read or companies:manage permission
+    const hasGlobalRead = user.permissions.some(
+      (p) => p.permission.code === "companies:read" && p.companyId === null
+    );
+    const hasGlobalManage = user.permissions.some(
+      (p) => p.permission.code === "companies:manage" && p.companyId === null
+    );
+
+    if (hasGlobalRead || hasGlobalManage) {
+      return totalCompanies;
+    }
+
+    // Count unique companies from user-specific permissions
+    const companyIdsFromPerms = new Set<string>();
+    user.permissions.forEach((p) => {
+      if (p.companyId) {
+        companyIdsFromPerms.add(p.companyId);
+      }
+    });
+
+    // Count companies they own
+    const ownedCompanyIds = new Set(user.companies.map(c => c.id));
+
+    // Merge both sets
+    const allAccessible = new Set([...companyIdsFromPerms, ...ownedCompanyIds]);
+
+    return allAccessible.size;
+  };
+
+  // Helper function to group and deduplicate permissions
+  const groupPermissions = (perms: typeof usersWithPerms[0]['permissions']) => {
+    const map = new Map<string, {
+      name: string;
+      code: string;
+      companyNames: string[];
+      isGlobal: boolean;
+    }>();
+
+    perms.forEach((perm) => {
+      const permId = perm.permissionId;
+      if (!map.has(permId)) {
+        map.set(permId, {
+          name: perm.permission.name,
+          code: perm.permission.code,
+          companyNames: [],
+          isGlobal: false,
+        });
+      }
+      const entry = map.get(permId)!;
+      if (perm.company && !entry.companyNames.includes(perm.company.name)) {
+        entry.companyNames.push(perm.company.name);
+      } else if (!perm.company) {
+        entry.isGlobal = true;
+      }
+    });
+
+    return Array.from(map.values());
+  };
+
+  // Get companies count for each user
+  const usersWithCompanyCount = usersWithPerms.map((user) => ({
+    ...user,
+    accessibleCompanyCount: getAccessibleCompanyCount(user),
+  }));
 
   return (
     <div className="space-y-6">
@@ -87,72 +163,79 @@ export default async function AdminEmployeesPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {usersWithPerms.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                        <span className="text-gray-600 font-medium">
-                          {user.name.charAt(0).toUpperCase()}
-                        </span>
+            {usersWithCompanyCount.map((user) => {
+              const groupedPerms = groupPermissions(user.permissions);
+
+              return (
+                <tr key={user.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-10 w-10">
+                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-gray-600 font-medium">
+                            {user.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
                       </div>
                     </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{user.email}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        user.role === "EMPLOYEE"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-green-100 text-green-800"
+                      }`}
+                    >
+                      {user.role === "EMPLOYEE" ? "Nhân viên" : "Khách hàng"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {groupedPerms.length === 0 ? (
+                        <span className="text-xs text-gray-500">Không có quyền đặc biệt</span>
+                      ) : (
+                        groupedPerms.map((perm, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded"
+                            title={
+                              perm.isGlobal
+                                ? "Toàn cục"
+                                : `Cho ${perm.companyNames.join(', ')}`
+                            }
+                          >
+                            {perm.name}
+                            {!perm.isGlobal && " (*)"}
+                          </span>
+                        ))
+                      )}
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{user.email}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      user.role === "EMPLOYEE"
-                        ? "bg-blue-100 text-blue-800"
-                        : "bg-green-100 text-green-800"
-                    }`}
-                  >
-                    {user.role === "EMPLOYEE" ? "Nhân viên" : "Khách hàng"}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-1">
-                    {user.permissions.length === 0 ? (
-                      <span className="text-xs text-gray-500">Không có quyền đặc biệt</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {user.accessibleCompanyCount > 0 ? (
+                      <span>{user.accessibleCompanyCount} công ty</span>
                     ) : (
-                      user.permissions.map((perm) => (
-                        <span
-                          key={perm.id}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded"
-                          title={perm.company ? `Cho công ty: ${perm.company.name}` : "Toàn cục"}
-                        >
-                          {perm.permission.code}
-                          {perm.company && " (*)"}
-                        </span>
-                      ))
+                      <span className="text-gray-400">-</span>
                     )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {/* Companies count based on ownership or permissions */}
-                  {user._count.companies > 0 ? (
-                    <span>{user._count.companies} công ty</span>
-                  ) : (
-                    <span className="text-gray-400">-</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <Link
-                    href={`/admin/employees/${user.id}/permissions`}
-                    className="text-blue-600 hover:text-blue-900 font-medium"
-                  >
-                    Phân quyền
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <Link
+                      href={`/admin/employees/${user.id}/permissions`}
+                      className="text-blue-600 hover:text-blue-900 font-medium"
+                    >
+                      Phân quyền
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

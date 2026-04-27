@@ -60,6 +60,7 @@ model Company {
   qrCodes             QrCode[]
   reviews             Review[]
   preGeneratedReviews PreGeneratedReview[]
+  customerContacts    CustomerContact[]
   userPermissions     UserPermission[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -97,18 +98,22 @@ model UserPermission {
 }
 
 model QrCode {
-  id          String   @id @default(cuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code        String   @unique // Short unique code: "ABC123XY"
-  socialLinks Json? // Stored as: { facebook?: string, tiktok?: string }
-  isActive    Boolean  @default(true)
-  reviews     Review[]
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code            String   @unique // Short unique code: "ABC123XY"
+  socialLinks     Json? // Stored as: { facebook?: string, tiktok?: string }
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime? // Null = never expires, otherwise expires at this time
+  reviews         Review[]
+  customerContacts CustomerContact[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([companyId])
   @@index([code])
   @@index([isActive])
+  @@index([expiresAt])
 }
 
 // ============================================
@@ -117,20 +122,21 @@ model QrCode {
 
 // Reviews created from QR scans
 model Review {
-  id            String       @id @default(cuid())
-  qrCodeId      String
-  qrCode        QrCode       @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
-  companyId     String // Denormalized for faster queries
-  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  content       String
-  rating        Int // 1-5
-  customerName  String?
-  customerPhone String?
-  status        ReviewStatus @default(PENDING)
-  isAiGenerated Boolean      @default(false)
-  usedAt        DateTime?
-  submittedAt   DateTime?
-  createdAt     DateTime     @default(now())
+  id              String       @id @default(cuid())
+  qrCodeId        String
+  qrCode          QrCode       @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
+  companyId       String // Denormalized for faster queries
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content         String
+  rating          Int // 1-5
+  customerName    String?
+  customerPhone   String?
+  status          ReviewStatus @default(PENDING)
+  isAiGenerated   Boolean      @default(false)
+  usedAt          DateTime?
+  submittedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  customerContacts CustomerContact[]
 
   @@index([companyId])
   @@index([qrCodeId])
@@ -189,6 +195,30 @@ model BackgroundJob {
   @@index([companyId])
   @@index([status])
   @@index([jobType, status]) // Find pending jobs quickly
+}
+
+// Customer contacts collected after review submission (for promotions)
+model CustomerContact {
+  id                String    @id @default(cuid())
+  reviewId          String?   // Optional link to the review submitted
+  qrCodeId          String?   // Optional link to QR code scanned
+  companyId         String    // Company that received this contact
+  customerName      String
+  customerPhone     String?
+  customerEmail     String?
+  promoCodeOffered  String?   // Promo code provided to customer
+  source            String    @default("review_thankyou") // How this contact was collected
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  review            Review?   @relation(fields: [reviewId], references: [id])
+  qrCode            QrCode?   @relation(fields: [qrCodeId], references: [id])
+  company           Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([customerEmail])
+  @@index([customerPhone])
+  @@index([createdAt])
 }
 
 enum JobType {

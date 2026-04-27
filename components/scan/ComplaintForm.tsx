@@ -7,10 +7,12 @@ import { MapPin } from "lucide-react";
 
 export interface ScanData {
   reviewId: string;
+  qrCodeId: string;
   content: string;
   rating: number;
   isAiGenerated: boolean;
   company: {
+    id: string;
     name: string;
     address: string;
     category: string;

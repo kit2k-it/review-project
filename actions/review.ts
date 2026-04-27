@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getSession, hasPermission, isCompanyOwner, getUserCompanies } from "@/lib/auth";
+import { getSession, hasPermission, isCompanyOwner, getUserCompanies, canViewCompany } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { reviewSubmitSchema } from "@/lib/validators";
 
@@ -120,9 +120,27 @@ export async function getReviewsAction(params: {
 
   // Apply specific company filter if provided (and user has access)
   if (params.companyId) {
-    const canView = await hasPermission(userId, "reviews:read") ||
-                     await isCompanyOwner(userId, params.companyId) ||
-                     await hasPermission(userId, "reviews:manage");
+    // Check if user has permission to view reviews for this specific company
+    const hasGlobalReviewsRead = await hasPermission(userId, "reviews:read");
+    const hasGlobalReviewsManage = await hasPermission(userId, "reviews:manage");
+    const isOwner = await isCompanyOwner(userId, params.companyId);
+
+    // Check specific company permission for reviews
+    const reviewPermIds = await prisma.permission.findMany({
+      where: { code: { in: ["reviews:read", "reviews:manage"] } },
+      select: { id: true },
+    });
+    const hasSpecificReviewPerm = reviewPermIds.length > 0 && (
+      await prisma.userPermission.findFirst({
+        where: {
+          userId,
+          companyId: params.companyId,
+          permissionId: { in: reviewPermIds.map(p => p.id) },
+        },
+      })
+    );
+
+    const canView = hasGlobalReviewsRead || hasGlobalReviewsManage || isOwner || !!hasSpecificReviewPerm;
     if (!canView) {
       return { error: "Không có quyền xem đánh giá của công ty này" };
     }
@@ -402,15 +420,9 @@ export async function getCompanyReviewPoolAction(companyId: string) {
   const company = await prisma.company.findUnique({ where: { id: companyId } });
   if (!company) return { error: "Công ty không tồn tại" };
 
-  // Check permission: ADMIN, or has global reviews:manage, or owner, or has companies:read
-  if (session.user.role !== "ADMIN") {
-    const hasGlobalManage = await hasPermission(session.user.id, "reviews:manage");
-    const isOwner = await isCompanyOwner(session.user.id, companyId);
-    const hasReadPerm = await hasPermission(session.user.id, "companies:read");
-    if (!hasGlobalManage && !isOwner && !hasReadPerm) {
-      return { error: "Không có quyền" };
-    }
-  }
+  // Use canViewCompany for consistent permission checks (includes per-company permissions)
+  const canView = await canViewCompany(companyId);
+  if (!canView) return { error: "Không có quyền" };
 
   const [available, used, pendingJob] = await Promise.all([
     prisma.preGeneratedReview.count({ where: { companyId, isUsed: false } }),

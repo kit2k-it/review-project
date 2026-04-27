@@ -40,6 +40,7 @@ export async function createQrCodeAction(
       companyId,
       code,
       socialLinks: socialLinks ?? undefined,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 ngày
     },
   });
 
@@ -98,6 +99,49 @@ export async function toggleQrCodeAction(id: string) {
   await prisma.qrCode.update({
     where: { id },
     data: { isActive: !qrCode.isActive },
+  });
+
+  revalidatePath(`/companies/${qrCode.companyId}/qr-codes`);
+  return { success: true };
+}
+
+// ==========================================
+// UPDATE QR CODE EXPIRY
+// ==========================================
+export async function updateQrCodeExpiryAction(data: {
+  qrId: string;
+  expiresAt: string | null; // ISO date string or null to remove expiry
+}) {
+  const user = await requireAuth();
+
+  const qrCode = await prisma.qrCode.findUnique({
+    where: { id: data.qrId },
+    include: { company: true },
+  });
+
+  if (!qrCode) return { error: "Mã QR không tồn tại" };
+
+  // Check permission: global qr-codes:manage OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "qr-codes:manage");
+  const isOwner = await isCompanyOwner(user.id, qrCode.companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền" };
+  }
+
+  // Parse expiresAt if provided
+  let expiresAt: Date | null = null;
+  if (data.expiresAt) {
+    const parsed = new Date(data.expiresAt);
+    if (isNaN(parsed.getTime())) {
+      return { error: "Ngày hết hạn không hợp lệ" };
+    }
+    expiresAt = parsed;
+  }
+
+  await prisma.qrCode.update({
+    where: { id: data.qrId },
+    data: { expiresAt },
   });
 
   revalidatePath(`/companies/${qrCode.companyId}/qr-codes`);

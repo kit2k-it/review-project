@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { MapPin, Copy, ExternalLink } from "lucide-react";
+import { MapPin, Copy, ExternalLink, Gift } from "lucide-react";
 import { ScanData } from "./ComplaintForm";
 import { markReviewAsDoneAction } from "@/actions/review";
+import CustomerInfoForm from "./CustomerInfoForm";
 
 interface ReviewFormProps {
   data: ScanData;
@@ -17,6 +18,7 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
   const [rating, setRating] = useState(data.rating);
   const [isPending, startTransition] = useTransition();
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showContactForm, setShowContactForm] = useState(false);
 
   async function handleCopyAndRedirect(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +50,17 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
     setTimeout(() => setIsSubmitted(true), 500);
   }
 
+  if (showContactForm) {
+    return (
+      <CustomerInfoForm
+        companyId={data.company.id}
+        reviewId={data.reviewId}
+        qrCodeId={data.qrCodeId}
+        onComplete={() => setShowContactForm(false)}
+      />
+    );
+  }
+
   if (isSubmitted) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
@@ -61,7 +74,16 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
           <p className="text-gray-500 max-w-xs mx-auto">
             Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn đã dành thời gian đánh giá chúng tôi!
           </p>
-          <div className="pt-2" />
+          <div className="pt-2">
+            <Button
+              onClick={() => setShowContactForm(true)}
+              className="gap-2"
+              size="lg"
+            >
+              <Gift className="h-4 w-4" />
+              Nhận ưu đãi từ {data.company.name}
+            </Button>
+          </div>
         </div>
         <p className="mt-12 text-xs text-gray-400">
           Powered by QRReview

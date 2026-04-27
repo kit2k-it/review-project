@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createQrCodeAction, deleteQrCodeAction, toggleQrCodeAction } from "@/actions/qr-code";
+import { createQrCodeAction, deleteQrCodeAction, toggleQrCodeAction, updateQrCodeExpiryAction } from "@/actions/qr-code";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import { generateQrDataUrl } from "@/lib/qr";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { QrCode, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check } from "lucide-react";
+import { QrCode, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check, Calendar } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useCallback } from "react";
@@ -19,6 +19,7 @@ interface QrCodeData {
   isActive: boolean;
   socialLinks: any;
   _count: { reviews: number };
+  expiresAt?: Date | null;
 }
 
 interface Props {
@@ -160,8 +161,57 @@ function QrCodeCard({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [editingExpiry, setEditingExpiry] = useState(false);
+  const [expiryValue, setExpiryValue] = useState<string>("");
+  const [expiryLoading, setExpiryLoading] = useState(false);
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
   const scanUrl = `${baseUrl}/scan/${qr.code}`;
+
+  // Calculate expiration status
+  const expiresAt = qr.expiresAt ? new Date(qr.expiresAt) : null;
+  const now = new Date();
+  const isExpired = expiresAt ? now > expiresAt : false;
+  const daysRemaining = expiresAt
+    ? Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  // Format date for datetime-local input
+  const formatDateTimeLocal = (date: Date | null) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const handleStartEditExpiry = () => {
+    setExpiryValue(formatDateTimeLocal(expiresAt));
+    setEditingExpiry(true);
+  };
+
+  const handleCancelEditExpiry = () => {
+    setEditingExpiry(false);
+    setExpiryValue("");
+  };
+
+  const handleSaveExpiry = async () => {
+    setExpiryLoading(true);
+    const result = await updateQrCodeExpiryAction({
+      qrId: qr.id,
+      expiresAt: expiryValue || null,
+    });
+    setExpiryLoading(false);
+
+    if (result && "error" in result) {
+      alert((result as { error: string }).error);
+    } else {
+      setEditingExpiry(false);
+      // Refresh page to update UI
+      window.location.reload();
+    }
+  };
 
   useEffect(() => {
     generateQrDataUrl(scanUrl).then(setQrDataUrl);
@@ -376,10 +426,17 @@ function QrCodeCard({
           {/* Code + status */}
           <div className="text-center">
             <p className="font-mono text-sm font-bold text-text">{qr.code}</p>
-            <div className="mt-1 flex items-center justify-center gap-2">
+            <div className="mt-1 flex items-center justify-center gap-2 flex-wrap">
               <Badge variant={qr.isActive ? "success" : "error"}>
                 {qr.isActive ? "Hoạt động" : "Tắt"}
               </Badge>
+              {isExpired ? (
+                <Badge variant="error">Hết hạn</Badge>
+              ) : expiresAt && daysRemaining !== null && daysRemaining <= 7 ? (
+                <Badge variant="warning">Sắp hết hạn ({daysRemaining} ngày)</Badge>
+              ) : expiresAt && daysRemaining !== null ? (
+                <span className="text-xs text-gray-500">{daysRemaining} ngày còn lại</span>
+              ) : null}
               <span className="text-xs text-gray-500">{qr._count.reviews} scan</span>
             </div>
           </div>
@@ -406,7 +463,6 @@ function QrCodeCard({
               onClick={handleCopyUrl}
               className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[80px]"
               title="Copy URL"
-              disabled={!canManage}
             >
               {copied ? <Check className="h-3 w-3 text-green-500 flex-shrink-0" /> : <Copy className="h-3 w-3 flex-shrink-0" />}
               {copied ? "Đã copy" : "Copy"}
@@ -415,7 +471,7 @@ function QrCodeCard({
               onClick={handlePreviewDownload}
               className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[60px]"
               title="Preview & Tải PNG"
-              disabled={!canManage || previewLoading}
+              disabled={previewLoading}
             >
               {previewLoading ? (
                 <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -437,6 +493,14 @@ function QrCodeCard({
               )}
             </button>
             <button
+              onClick={handleStartEditExpiry}
+              className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+              title="Chỉnh sửa hạn sử dụng"
+              disabled={!canManage || editingExpiry}
+            >
+              <Calendar className="h-3 w-3" />
+            </button>
+            <button
               onClick={() => onDelete(qr.id)}
               className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
               title="Xóa"
@@ -445,6 +509,52 @@ function QrCodeCard({
               <Trash2 className="h-3 w-3" />
             </button>
           </div>
+
+          {/* Expiry Edit Form */}
+          {editingExpiry && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-text">Hạn sử dụng</label>
+                  <input
+                    type="datetime-local"
+                    value={expiryValue}
+                    onChange={(e) => setExpiryValue(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-border bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Để trống để không có hạn sử dụng
+                  </p>
+                </div>
+                {expiryValue && (
+                  <div className="text-xs text-gray-600">
+                    {(() => {
+                      const date = new Date(expiryValue);
+                      const now = new Date();
+                      const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      return days > 0 ? `Còn ${days} ngày` : `Đã hết ${Math.abs(days)} ngày`;
+                    })()}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEditExpiry}
+                    className="px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 rounded border border-border"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={handleSaveExpiry}
+                    disabled={expiryLoading}
+                    className="px-3 py-1 text-xs font-medium bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {expiryLoading ? "Đang lưu..." : "Lưu"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

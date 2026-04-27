@@ -164,7 +164,7 @@ export async function removeUserPermissionAction(permissionId: string) {
 
 // ==========================================
 // ASSIGN COMPANY TO USER (for read access)
-// Convenience function to assign companies:read permission
+// Convenience function to assign companies:read, qr-codes:read, and reviews:read permissions
 // ==========================================
 export async function assignCompanyToUserAction(userId: string, companyId: string) {
   const admin = await requireAuth();
@@ -180,41 +180,44 @@ export async function assignCompanyToUserAction(userId: string, companyId: strin
     }
   }
 
-  // Get companies:read permission
-  const readPerm = await prisma.permission.findUnique({
-    where: { code: "companies:read" },
+  // Get all required read permissions
+  const permissionCodes = ["companies:read", "qr-codes:read", "reviews:read"];
+  const permissions = await prisma.permission.findMany({
+    where: { code: { in: permissionCodes } },
   });
 
-  if (!readPerm) {
-    return { error: "Permission companies:read không tồn tại" };
+  if (permissions.length !== permissionCodes.length) {
+    return { error: "Một hoặc nhiều permission không tồn tại trong hệ thống" };
   }
 
-  // Check if already assigned
-  const existing = await prisma.userPermission.findFirst({
-    where: {
-      userId,
-      permissionId: readPerm.id,
-      companyId,
-    },
-  });
+  // Check and create permissions for each
+  const results = [];
+  for (const perm of permissions) {
+    // Check if already assigned
+    const existing = await prisma.userPermission.findFirst({
+      where: {
+        userId,
+        permissionId: perm.id,
+        companyId,
+      },
+    });
 
-  if (existing) {
-    return { error: "Đã gán quyền xem cho công ty này" };
+    if (!existing) {
+      await prisma.userPermission.create({
+        data: {
+          userId,
+          permissionId: perm.id,
+          companyId,
+        },
+      });
+      results.push(perm.code);
+    }
   }
-
-  // Create permission
-  await prisma.userPermission.create({
-    data: {
-      userId,
-      permissionId: readPerm.id,
-      companyId,
-    },
-  });
 
   revalidatePath("/admin/employees");
   revalidatePath("/companies");
 
-  return { success: true };
+  return { success: true, assigned: results };
 }
 
 // ==========================================
@@ -233,33 +236,36 @@ export async function removeCompanyFromUserAction(userId: string, companyId: str
     }
   }
 
-  // Find the companies:read permission assignment
-  const readPerm = await prisma.permission.findUnique({
-    where: { code: "companies:read" },
+  // Get all company-related read permissions
+  const permissionCodes = ["companies:read", "qr-codes:read", "reviews:read"];
+  const permissions = await prisma.permission.findMany({
+    where: { code: { in: permissionCodes } },
   });
 
-  if (!readPerm) {
-    return { error: "Permission không tồn tại" };
-  }
+  const permissionIds = permissions.map(p => p.id);
 
-  const userPerm = await prisma.userPermission.findFirst({
+  // Find all user permissions for these permissions and this company
+  const userPerms = await prisma.userPermission.findMany({
     where: {
       userId,
-      permissionId: readPerm.id,
+      permissionId: { in: permissionIds },
       companyId,
     },
   });
 
-  if (!userPerm) {
+  if (userPerms.length === 0) {
     return { error: "Chưa được gán quyền truy cập" };
   }
 
-  await prisma.userPermission.delete({ where: { id: userPerm.id } });
+  // Delete all matching permissions
+  for (const userPerm of userPerms) {
+    await prisma.userPermission.delete({ where: { id: userPerm.id } });
+  }
 
   revalidatePath("/admin/employees");
   revalidatePath("/companies");
 
-  return { success: true };
+  return { success: true, removed: userPerms.length };
 }
 
 // ==========================================

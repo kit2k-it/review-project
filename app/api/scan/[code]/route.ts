@@ -55,6 +55,14 @@ export async function GET(
     );
   }
 
+  // Check expiration
+  if (qrCode.expiresAt && new Date() > qrCode.expiresAt) {
+    return NextResponse.json(
+      { error: "Mã QR đã hết hạn sử dụng" },
+      { status: 410 }
+    );
+  }
+
   const company = qrCode.company;
 
   // Strategy 1: Try to get an unused + active pre-generated review
@@ -121,10 +129,12 @@ export async function GET(
   // Return the review + metadata needed for the form
   return NextResponse.json({
     reviewId: review.id,
+    qrCodeId: qrCode.id,
     content: reviewContent,
     rating,
     isAiGenerated,
     company: {
+      id: company.id,
       name: company.name,
       address: company.address,
       category: company.category,

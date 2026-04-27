@@ -209,42 +209,65 @@ export async function requireEmployee() {
 }
 
 // Check if user can manage a specific company
-// ADMIN: any company | Others: global companies:manage OR ownership
+// ADMIN: any company | Others: global companies:manage OR ownership OR specific company:manage permission
 export async function canManageCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
+
+  const userId = session.user.id;
 
   // ADMIN always can manage
   if (session.user.role === "ADMIN") return true;
 
   // Check if user has GLOBAL manage permission
-  const hasGlobalManage = await hasPermission(session.user.id, "companies:manage");
-  if (hasGlobalManage) return true;
+  if (await hasPermission(userId, "companies:manage")) return true;
 
   // Check if user is owner
-  const isOwner = await isCompanyOwner(session.user.id, companyId);
+  if (await isCompanyOwner(userId, companyId)) return true;
 
-  return isOwner;
+  // Check if user has specific manage permission for this company
+  const specificPerm = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      companyId,
+      permission: {
+        code: "companies:manage",
+      },
+    },
+  });
+
+  return !!specificPerm;
 }
 
 // Can VIEW a company (less strict than manage)
-// ADMIN: any company | Others: global companies:read or companies:manage OR ownership
+// ADMIN: any company | Others: global companies:read or companies:manage OR ownership OR specific company permission
 export async function canViewCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
+
+  const userId = session.user.id;
 
   // ADMIN always can view
   if (session.user.role === "ADMIN") return true;
 
   // Check if user has GLOBAL read or manage permission
-  const hasGlobalRead = await hasPermission(session.user.id, "companies:read");
-  const hasGlobalManage = await hasPermission(session.user.id, "companies:manage");
-  if (hasGlobalRead || hasGlobalManage) return true;
+  const hasRead = await hasPermission(userId, "companies:read");
+  const hasManage = await hasPermission(userId, "companies:manage");
+  if (hasRead || hasManage) return true;
 
   // Check if user is owner
-  const isOwner = await isCompanyOwner(session.user.id, companyId);
+  if (await isCompanyOwner(userId, companyId)) return true;
 
-  return isOwner;
+  // Check if user has specific permission for this company (companies:read or companies:manage)
+  const specificPerm = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      companyId,
+      permission: { code: { in: ["companies:read", "companies:manage"] } },
+    },
+  });
+
+  return !!specificPerm;
 }
 
 // Export permission helpers for convenience

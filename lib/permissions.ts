@@ -58,7 +58,7 @@ export async function isCompanyOwner(userId: string, companyId: string): Promise
  * Get all companies that a user can access.
  * ADMIN: all companies
  * Global permission holders (companies:read or companies:manage): all companies
- * Others: only owned companies
+ * Others: companies they own + companies they have VIEW permission for (companies:read or companies:manage)
  *
  * @param userId - User ID
  * @returns Array of companies with id and name
@@ -91,10 +91,50 @@ export async function getUserCompanies(userId: string) {
     });
   }
 
-  // Only owned companies
-  return prisma.company.findMany({
+  // Get companies user owns
+  const ownedCompanies = await prisma.company.findMany({
     where: { userId },
     select: { id: true, name: true, isActive: true },
-    orderBy: { createdAt: "desc" },
   });
+
+  // Get companies user has VIEW permission for (companies:read or companies:manage)
+  // First get permission IDs
+  const viewPerms = await prisma.permission.findMany({
+    where: { code: { in: ["companies:read", "companies:manage"] } },
+    select: { id: true },
+  });
+  const viewPermIds = viewPerms.map(p => p.id);
+
+  if (viewPermIds.length > 0) {
+    const userPerms = await prisma.userPermission.findMany({
+      where: {
+        userId,
+        companyId: { not: null },
+        permissionId: { in: viewPermIds },
+      },
+      include: {
+        company: {
+          select: { id: true, name: true, isActive: true },
+        },
+      },
+    });
+
+    // Merge and deduplicate by company ID
+    const companyMap = new Map<string, { id: string; name: string; isActive: boolean }>();
+
+    ownedCompanies.forEach(company => {
+      companyMap.set(company.id, company);
+    });
+
+    userPerms.forEach(perm => {
+      if (perm.company) {
+        companyMap.set(perm.company.id, perm.company);
+      }
+    });
+
+    return Array.from(companyMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // If no view perms found, return only owned
+  return ownedCompanies.sort((a, b) => a.name.localeCompare(b.name));
 }
