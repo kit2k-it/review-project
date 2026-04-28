@@ -5,8 +5,9 @@ import { getSession, canViewCompany, canManageCompany } from "@/lib/auth";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import QrCodesManager from "@/components/dashboard/QrCodesManager";
 import CompanyDetailEdit from "./CompanyDetailEdit";
+import AccessManagement from "./AccessManagement";
 import Link from "next/link";
-import { ArrowLeft, Star, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, Star, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { assignCompanyToUserAction } from "@/actions/permission";
@@ -21,25 +22,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CompanyDetailPage({ params }: Props) {
   const { id } = await params;
-  console.log('[CompanyDetailPage] Requested company ID:', id);
 
   const session = await getSession();
   if (!session?.user) {
-    console.log('[CompanyDetailPage] No session - notFound');
     notFound();
   }
 
   const userId = session.user.id;
   const userRole = session.user.role;
-  console.log('[CompanyDetailPage] User:', userId, 'role:', userRole);
 
   // Check access
   const canView = await canViewCompany(id);
-  console.log('[CompanyDetailPage] canView result:', canView);
-  if (!canView) {
-    console.log('[CompanyDetailPage] Access denied - notFound');
-    notFound();
-  }
+  if (!canView) notFound();
 
   // Check if user can manage this company
   const canManage = await canManageCompany(id);
@@ -66,18 +60,20 @@ export default async function CompanyDetailPage({ params }: Props) {
     }) as any,
   ]);
 
-  console.log('[CompanyDetailPage] Company query result:', company ? 'FOUND' : 'NOT FOUND');
-  if (!company) {
-    console.log('[CompanyDetailPage] Company not found - notFound');
-    notFound();
-  }
+  if (!company) notFound();
   if ("error" in poolResult) notFound();
   const pool = poolResult as { available: number; used: number; pendingJob: boolean };
 
-  // Group assigned users by permission type
-  const usersWithAccess = (assignedUsers as any[]).filter(up =>
-    up.permission.code === "companies:read" || up.permission.code === "companies:manage"
-  );
+  // Filter and deduplicate users with access (by user.id)
+  const usersWithAccessMap = new Map<string, any>();
+  (assignedUsers as any[]).forEach((up) => {
+    if (up.permission.code === "companies:read" || up.permission.code === "companies:manage") {
+      if (!usersWithAccessMap.has(up.user.id)) {
+        usersWithAccessMap.set(up.user.id, up);
+      }
+    }
+  });
+  const usersWithAccess = Array.from(usersWithAccessMap.values());
 
   // Check if current user can assign access
   const canAssignAccess = userRole === "ADMIN" || await canManageCompany(id);
@@ -127,82 +123,64 @@ export default async function CompanyDetailPage({ params }: Props) {
 
           {/* Access Management - Show who has access */}
           {(canManage || userRole === "ADMIN") && (
+            <AccessManagement
+              usersWithAccess={usersWithAccess}
+              companyId={id}
+              canAssignAccess={canAssignAccess}
+              currentUserId={userId}
+            />
+          )}
+
+          {/* Assign access form */}
+          {canAssignAccess && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="h-4 w-4" />
-                  Truy cập
-                </CardTitle>
+                <CardTitle className="text-base">Gán quyền truy cập</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Người dùng có quyền xem</h4>
-                  {usersWithAccess.length === 0 ? (
-                    <p className="text-sm text-gray-500">Chưa ai được gán quyền</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {usersWithAccess.map((up) => (
-                        <li key={up.id} className="flex items-center justify-between text-sm">
-                          <div>
-                            <span className="font-medium">{up.user.name}</span>
-                            <span className="text-gray-500 ml-2">({up.user.email})</span>
-                            <div className="text-xs text-gray-400">
-                              {up.user.role === "EMPLOYEE" ? "Nhân viên" : "Khách hàng"}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+              <CardContent>
+                <form
+                  action={async (formData: FormData) => {
+                    "use server";
+                    const email = formData.get("email") as string;
 
-                {/* Assign access button */}
-                {canAssignAccess && (
-                  <form
-                    action={async (formData: FormData) => {
-                      "use server";
-                      const email = formData.get("email") as string;
+                    // Find user by email
+                    const targetUser = await prisma.user.findFirst({
+                      where: { email },
+                    });
 
-                      // Find user by email
-                      const targetUser = await prisma.user.findFirst({
-                        where: { email },
-                      });
+                    if (!targetUser) {
+                      redirect(`/companies/${id}?error=Không tìm thấy người dùng`);
+                      return;
+                    }
 
-                      if (!targetUser) {
-                        // Return error via redirect
-                        redirect(`/companies/${id}?error=Không tìm thấy người dùng`);
-                        return;
-                      }
+                    const result = await assignCompanyToUserAction(targetUser.id, id);
 
-                      const result = await assignCompanyToUserAction(targetUser.id, id);
-
-                      if (result.error) {
-                        redirect(`/companies/${id}?error=${encodeURIComponent(result.error)}`);
-                      }
-                      redirect(`/companies/${id}?success=1`);
-                    }}
-                  >
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Gán quyền truy cập cho người dùng</label>
-                      <div className="flex gap-2">
-                        <input
-                          name="email"
-                          type="email"
-                          placeholder="Email người dùng..."
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          required
-                        />
-                        <Button type="submit" size="sm">
-                          <UserPlus className="h-4 w-4" />
-                          Gán
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Nhập email của nhân viên/khách hàng để gán quyền xem công ty này
-                      </p>
+                    if (result.error) {
+                      redirect(`/companies/${id}?error=${encodeURIComponent(result.error)}`);
+                    }
+                    redirect(`/companies/${id}?success=1`);
+                  }}
+                >
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Gán quyền truy cập cho người dùng</label>
+                    <div className="flex gap-2">
+                      <input
+                        name="email"
+                        type="email"
+                        placeholder="Email người dùng..."
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        required
+                      />
+                      <Button type="submit" size="sm">
+                        <UserPlus className="h-4 w-4" />
+                        Gán
+                      </Button>
                     </div>
-                  </form>
-                )}
+                    <p className="text-xs text-gray-500">
+                      Nhập email của nhân viên/khách hàng để gán quyền xem công ty này
+                    </p>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           )}

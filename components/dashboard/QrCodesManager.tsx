@@ -295,16 +295,40 @@ function QrCodeCard({
         // Now create final canvas with background (9:16 aspect ratio)
         console.log('[QR Debug] Creating final canvas with 9:16 aspect ratio...');
         const canvasWidth = width; // e.g., 300
-        const canvasHeight = width * (16 / 9); // e.g., 533.33 for 9:16
+        const canvasHeight = Math.round(width * (16 / 9)); // e.g., 533 for 9:16
         const canvas = document.createElement("canvas");
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Cannot get final canvas context");
 
-        // Draw background image full canvas (stretched to fill)
-        console.log('[QR Debug] Drawing background image full canvas (9:16)...');
-        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
+        // Calculate cover positioning: fit background to cover entire canvas while maintaining aspect ratio
+        const bgAspectRatio = bgImg.width / bgImg.height;
+        const canvasAspectRatio = canvasWidth / canvasHeight;
+
+        let drawWidth: number, drawHeight: number, offsetX: number, offsetY: number;
+
+        if (bgAspectRatio > canvasAspectRatio) {
+          // Background is wider than canvas - crop horizontally
+          drawHeight = canvasHeight;
+          drawWidth = bgImg.width * (canvasHeight / bgImg.height);
+          offsetX = (canvasWidth - drawWidth) / 2;
+          offsetY = 0;
+        } else {
+          // Background is taller than canvas - crop vertically
+          drawWidth = canvasWidth;
+          drawHeight = bgImg.height * (canvasWidth / bgImg.width);
+          offsetX = 0;
+          offsetY = (canvasHeight - drawHeight) / 2;
+        }
+
+        console.log('[QR Debug] Drawing background with cover fit:', {
+          bgSize: `${bgImg.width}x${bgImg.height}`,
+          canvasSize: `${canvasWidth}x${canvasHeight}`,
+          drawSize: `${drawWidth.toFixed(1)}x${drawHeight.toFixed(1)}`,
+          offset: { x: offsetX.toFixed(1), y: offsetY.toFixed(1) }
+        });
+        ctx.drawImage(bgImg, offsetX, offsetY, drawWidth, drawHeight);
 
         // Draw transparent QR on top (45% of canvas width, left-aligned with 20px margin, vertically centered)
         const qrSize = canvasWidth * 0.45; // QR code is 45% of canvas width
@@ -459,6 +483,7 @@ function QrCodeCard({
 
           {/* Actions */}
           <div className="flex flex-wrap gap-1">
+            {/* Copy URL - always visible */}
             <button
               onClick={handleCopyUrl}
               className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[80px]"
@@ -467,6 +492,7 @@ function QrCodeCard({
               {copied ? <Check className="h-3 w-3 text-green-500 flex-shrink-0" /> : <Copy className="h-3 w-3 flex-shrink-0" />}
               {copied ? "Đã copy" : "Copy"}
             </button>
+            {/* Download PNG - always visible */}
             <button
               onClick={handlePreviewDownload}
               className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[60px]"
@@ -480,34 +506,37 @@ function QrCodeCard({
               )}
               PNG
             </button>
-            <button
-              onClick={() => onToggle(qr.id)}
-              className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-              title={qr.isActive ? "Tắt" : "Bật"}
-              disabled={!canManage}
-            >
-              {qr.isActive ? (
-                <ToggleRight className="h-3 w-3 text-green-500" />
-              ) : (
-                <ToggleLeft className="h-3 w-3 text-gray-400" />
-              )}
-            </button>
-            <button
-              onClick={handleStartEditExpiry}
-              className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-              title="Chỉnh sửa hạn sử dụng"
-              disabled={!canManage || editingExpiry}
-            >
-              <Calendar className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => onDelete(qr.id)}
-              className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-              title="Xóa"
-              disabled={!canManage}
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
+            {/* Management actions - only visible if canManage */}
+            {canManage && (
+              <>
+                <button
+                  onClick={() => onToggle(qr.id)}
+                  className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+                  title={qr.isActive ? "Tắt" : "Bật"}
+                >
+                  {qr.isActive ? (
+                    <ToggleRight className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <ToggleLeft className="h-3 w-3 text-gray-400" />
+                  )}
+                </button>
+                <button
+                  onClick={handleStartEditExpiry}
+                  className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+                  title="Chỉnh sửa hạn sử dụng"
+                  disabled={editingExpiry}
+                >
+                  <Calendar className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => onDelete(qr.id)}
+                  className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
+                  title="Xóa"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Expiry Edit Form */}

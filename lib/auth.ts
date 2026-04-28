@@ -225,6 +225,11 @@ export async function canManageCompany(companyId: string): Promise<boolean> {
   // Check if user is owner
   if (await isCompanyOwner(userId, companyId)) return true;
 
+  // EMPLOYEE cannot use per-company permissions, only ownership
+  if (session.user.role === "EMPLOYEE") {
+    return false;
+  }
+
   // Check if user has specific manage permission for this company
   const specificPerm = await prisma.userPermission.findFirst({
     where: {
@@ -257,6 +262,11 @@ export async function canViewCompany(companyId: string): Promise<boolean> {
 
   // Check if user is owner
   if (await isCompanyOwner(userId, companyId)) return true;
+
+  // EMPLOYEE cannot use per-company permissions, only ownership
+  if (session.user.role === "EMPLOYEE") {
+    return false;
+  }
 
   // Check if user has specific permission for this company (companies:read or companies:manage)
   const specificPerm = await prisma.userPermission.findFirst({

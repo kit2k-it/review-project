@@ -16,20 +16,23 @@ export default async function DashboardPage() {
 
   const user = session.user;
 
-  // Build query filter based on role
+  // Redirect CLIENT away from dashboard - they should go to companies page instead
+  if (user.role === "CLIENT") {
+    redirect("/companies");
+  }
+
+  // Build query filter based on role (CLIENT already redirected above)
   let companyFilter: object = {};
   let reviewFilter: object = {};
 
   if (user.role === "ADMIN") {
     // Admin sees all
-  } else if (user.role === "CLIENT") {
-    companyFilter = { userId: user.id };
-    reviewFilter = { company: { userId: user.id } };
   } else if (user.role === "EMPLOYEE") {
     // Employee sees companies they have permissions for (via UserPermission)
     companyFilter = { userPermissions: { some: { userId: user.id } } };
     reviewFilter = { company: { userPermissions: { some: { userId: user.id } } } };
   } else {
+    // USER role - sees their own companies
     companyFilter = { userId: user.id };
     reviewFilter = { company: { userId: user.id } };
   }
@@ -52,7 +55,7 @@ export default async function DashboardPage() {
     { label: "Đánh giá", value: reviewCount, icon: Star, color: "text-accent" },
   ];
 
-  const showCreateCompany = user.role === "ADMIN" || user.role === "CLIENT";
+  const showCreateCompany = ["ADMIN", "USER", "EMPLOYEE"].includes(user.role);
 
   return (
     <div className="space-y-6">

@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Permission {
@@ -42,6 +42,7 @@ export default function UserPermissionsClient({
   const [isPending, startTransition] = useTransition();
   const [permissions] = useState<Permission[]>(initialPermissions);
   const [userPermissions, setUserPermissions] = useState<UserPermission[]>(initialUserPermissions);
+  const [removingPermissionId, setRemovingPermissionId] = useState<string | null>(null);
 
   // Map key: permissionId
   const getPermissionKey = (permId: string) => permId;
@@ -72,6 +73,37 @@ export default function UserPermissionsClient({
       return next;
     });
   };
+
+  // Remove single permission immediately
+  async function handleRemovePermission(permissionId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm("Gỡ quyền này?")) return;
+
+    setRemovingPermissionId(permissionId);
+    try {
+      const response = await fetch(`/api/admin/employees/${initialUser.id}/permissions/${permissionId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        // Remove from both selectedPermissions and userPermissions state
+        const key = getPermissionKey(permissionId);
+        setSelectedPermissions((prev) => {
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+        setUserPermissions((prev) => prev.filter((up) => up.permissionId !== permissionId));
+        router.refresh();
+      } else {
+        alert("Có lỗi xảy ra khi gỡ quyền");
+      }
+    } catch {
+      alert("Có lỗi xảy ra khi gỡ quyền");
+    } finally {
+      setRemovingPermissionId(null);
+    }
+  }
 
   // Save all changes
   const handleSave = async () => {

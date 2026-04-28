@@ -26,7 +26,7 @@ const navItemsByRole: Record<string, { href: string; label: string; icon: React.
     { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
   ],
   CLIENT: [
-    { href: "/", label: "Tổng quan", icon: LayoutDashboard },
+    // Không hiển thị "Tổng quan" cho CLIENT
     { href: "/companies", label: "Khách hàng", icon: Building2 },
     { href: "/reviews", label: "Đánh giá", icon: Star },
   ],

@@ -36,8 +36,8 @@ export default async function CompaniesPage({
     },
   });
 
-  // Check if user can add company (ADMIN or has companies:manage permission)
-  const canCreateCompany = user.role === "ADMIN" || await hasPermission(user.id, "companies:manage");
+  // Check if user can add company (ADMIN, USER, EMPLOYEE, or has companies:manage permission)
+  const canCreateCompany = ["ADMIN", "USER", "EMPLOYEE"].includes(user.role) || await hasPermission(user.id, "companies:manage");
 
   const { companies, pagination } = await listCompaniesAction({
     search,

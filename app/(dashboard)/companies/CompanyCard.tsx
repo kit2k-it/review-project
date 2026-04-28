@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { MapPin, QrCode, Star, Phone, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { MapPin, QrCode, Star, Phone, ChevronRight, Trash2 } from "lucide-react";
 import { ToggleCompanyActiveButton } from "./ToggleCompanyActiveButton";
+import { deleteCompanyAction } from "@/actions/company";
 
 interface CompanyCardProps {
   company: {
@@ -20,6 +23,32 @@ interface CompanyCardProps {
 }
 
 export function CompanyCard({ company, canManage }: CompanyCardProps) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!confirm(`Bạn có chắc muốn xóa công ty "${company.name}"? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const result = await deleteCompanyAction(company.id);
+      setDeleting(false);
+
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        // Refresh page to show updated list
+        window.location.reload();
+      }
+    } catch (err) {
+      setDeleting(false);
+      setError("Đã xảy ra lỗi");
+    }
+  }
   return (
     <Card className={`group relative overflow-hidden ${!company.isActive ? "opacity-60" : ""}`}>
       <Link href={`/companies/${company.id}`} className="block cursor-pointer">
@@ -67,20 +96,35 @@ export function CompanyCard({ company, canManage }: CompanyCardProps) {
         </CardContent>
       </Link>
       {canManage && (
-        <div className="absolute bottom-3 right-3 flex gap-2">
-          <Link
-            href={`/companies/${company.id}/qr-codes`}
-            className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-          >
-            Mã QR
-          </Link>
-          <Link
-            href={`/companies/${company.id}/edit`}
-            className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-          >
-            Sửa
-          </Link>
-          <ToggleCompanyActiveButton id={company.id} isActive={company.isActive} />
+        <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
+          <div className="flex gap-2">
+            <Link
+              href={`/companies/${company.id}/qr-codes`}
+              className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+            >
+              Mã QR
+            </Link>
+            <Link
+              href={`/companies/${company.id}/edit`}
+              className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+            >
+              Sửa
+            </Link>
+            <ToggleCompanyActiveButton id={company.id} isActive={company.isActive} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="h-7 px-2 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+          {error && (
+            <p className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">{error}</p>
+          )}
         </div>
       )}
     </Card>

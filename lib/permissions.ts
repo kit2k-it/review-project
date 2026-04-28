@@ -77,6 +77,15 @@ export async function getUserCompanies(userId: string) {
     });
   }
 
+  // EMPLOYEE role: only see companies they own (no per-company permissions)
+  if (user?.role === "EMPLOYEE") {
+    const ownedCompanies = await prisma.company.findMany({
+      where: { userId },
+      select: { id: true, name: true, isActive: true },
+    });
+    return ownedCompanies.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   // Check if user has global companies:read or companies:manage permission
   const [hasRead, hasManage] = await Promise.all([
     hasPermission(userId, "companies:read"),

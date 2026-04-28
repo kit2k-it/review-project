@@ -16,9 +16,10 @@ export async function createCompanyAction(
 ) {
   const user = await requireAuth();
 
-  // Check permission: ADMIN or has global companies:manage
+  // Check permission: ADMIN, USER, EMPLOYEE, or has global companies:manage
+  const allowedRoles = ["ADMIN", "USER", "EMPLOYEE"];
   const hasGlobalManage = await hasPermission(user.id, "companies:manage");
-  if (user.role !== "ADMIN" && !hasGlobalManage) {
+  if (!allowedRoles.includes(user.role) && !hasGlobalManage) {
     return { error: "Không có quyền tạo khách hàng" };
   }
 
