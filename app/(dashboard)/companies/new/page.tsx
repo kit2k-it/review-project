@@ -43,6 +43,8 @@ export default function NewCompanyPage() {
     hashtags: "",
     placeId: "",
     complaintEmail: "",
+    facebook: "",
+    tiktok: "",
   });
 
   async function handleSearch() {
@@ -52,7 +54,7 @@ export default function NewCompanyPage() {
     setError(null);
     setSelectedPlace(null);
     setPredictions([]);
-    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "", complaintEmail: "" }));
+    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "", complaintEmail: "", facebook: "", tiktok: "" }));
 
     try {
       const res = await fetch(`/api/places?q=${encodeURIComponent(query.trim())}`);
@@ -89,6 +91,8 @@ export default function NewCompanyPage() {
           hashtags: details.hashtags || "",
           placeId: details.placeId,
           complaintEmail: "",
+          facebook: "",
+          tiktok: "",
         });
         setPredictions([]);
         setQuery("");
@@ -307,6 +311,36 @@ export default function NewCompanyPage() {
               onChange={(e) => setFormData((f) => ({ ...f, complaintEmail: e.target.value }))}
               placeholder="complaints@example.com"
             />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-text">
+                  Facebook URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.facebook}
+                  onChange={(e) => setFormData((f) => ({ ...f, facebook: e.target.value }))}
+                  placeholder="https://facebook.com/..."
+                  className="mt-1 flex h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-text">
+                  TikTok URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.tiktok}
+                  onChange={(e) => setFormData((f) => ({ ...f, tiktok: e.target.value }))}
+                  placeholder="https://tiktok.com/@..."
+                  className="mt-1 flex h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Những liên kết này sẽ hiển thị trên tất cả mã QR của cửa hàng
+            </p>
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={pending}>

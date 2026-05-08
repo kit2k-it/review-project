@@ -8,10 +8,7 @@ import { revalidatePath } from "next/cache";
 // ==========================================
 // CREATE QR CODE
 // ==========================================
-export async function createQrCodeAction(
-  companyId: string,
-  socialLinks?: { facebook?: string; tiktok?: string }
-) {
+export async function createQrCodeAction(companyId: string) {
   const user = await requireAuth();
 
   const company = await prisma.company.findUnique({ where: { id: companyId } });
@@ -39,7 +36,6 @@ export async function createQrCodeAction(
     data: {
       companyId,
       code,
-      socialLinks: socialLinks ?? undefined,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 ngày
     },
   });

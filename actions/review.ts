@@ -213,7 +213,7 @@ export async function generateReviewsForCompany(companyId: string) {
   });
 }
 
-async function executeReviewGeneration(jobId: string) {
+export async function executeReviewGeneration(jobId: string) {
   const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "10");
   const BATCH_SIZE = Number(process.env.REVIEW_BATCH_SIZE || "15");
 
@@ -310,7 +310,7 @@ async function executeReviewGeneration(jobId: string) {
 // If pool is low, reset oldest used reviews so they can be reused
 // ==========================================
 export async function checkAndTriggerGeneration(companyId: string) {
-  const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "10");
+  const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "5");
 
   const [availableCount, pendingJob] = await Promise.all([
     prisma.preGeneratedReview.count({
@@ -326,11 +326,10 @@ export async function checkAndTriggerGeneration(companyId: string) {
   ]);
 
   if (availableCount < THRESHOLD && !pendingJob) {
-    // Reset oldest used reviews so they can be reused
-    await prisma.preGeneratedReview.updateMany({
-      where: { companyId, isUsed: true },
-      data: { isUsed: false, usedAt: null },
-    });
+    // Trigger background generation to refill the pool with new reviews
+    // (no recycling - only create fresh reviews)
+    await generateReviewsForCompany(companyId);
+
     return { triggered: true, availableCount };
   }
 

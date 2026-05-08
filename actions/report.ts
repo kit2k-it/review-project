@@ -158,8 +158,16 @@ export async function getReportOverview(params?: ReportParams): Promise<{
     used: number;
   };
 }> {
-  const session = await requireAuth();
-  const userId = session.id;
+  // Get userId from session or use provided userId
+  let userId: string;
+
+  try {
+    const session = await requireAuth();
+    userId = session.id;
+  } catch {
+    // If requireAuth fails, the calling page should handle auth
+    throw new Error("Chưa đăng nhập");
+  }
 
   // Build company filter
   const companyFilter = await buildCompanyFilter(userId, params);
@@ -600,4 +608,121 @@ export async function exportReportCsv(params?: ReportParams): Promise<Blob> {
     .join("\n");
 
   return new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+}
+
+/**
+ * Get report overview for EMPLOYEE role
+ * Only shows data for companies they manage/own
+ */
+export async function getEmployeeReportOverview(userId: string, params?: ReportParams): Promise<{
+  totalCompanies: number;
+  activeCompanies: number;
+  inactiveCompanies: number;
+  totalQrCodes: number;
+  activeQrCodes: number;
+  totalReviews: number;
+  reviewsByStatus: { status: string; count: number }[];
+  averageRating: number | null;
+  preGeneratedReviews: {
+    total: number;
+    available: number;
+    used: number;
+  };
+}> {
+  // Get companies this employee owns
+  const ownedCompanies = await prisma.company.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  const ownedIds = ownedCompanies.map(c => c.id);
+
+  // Get companies user has permissions for (from userPermission)
+  const permCompanies = await prisma.userPermission.findMany({
+    where: {
+      userId,
+      companyId: { not: null },
+    },
+    select: { companyId: true },
+    distinct: ['companyId'],
+  });
+  const permIds = permCompanies.map(p => p.companyId!).filter(Boolean);
+
+  // Merge all company IDs (owned + permission-based)
+  const allCompanyIds = [...new Set([...ownedIds, ...permIds])];
+
+  if (allCompanyIds.length === 0) {
+    return {
+      totalCompanies: 0,
+      activeCompanies: 0,
+      inactiveCompanies: 0,
+      totalQrCodes: 0,
+      activeQrCodes: 0,
+      totalReviews: 0,
+      reviewsByStatus: [],
+      averageRating: null,
+      preGeneratedReviews: { total: 0, available: 0, used: 0 },
+    };
+  }
+
+  const { from, to } = parseDateRange(params);
+
+  // Build where clause for date range
+  const dateFilter: any = {};
+  if (from || to) {
+    dateFilter.createdAt = {};
+    if (from) dateFilter.createdAt.gte = from;
+    if (to) dateFilter.createdAt.lte = to;
+  }
+
+  const [
+    totalCompanies,
+    activeCompanies,
+    inactiveCompanies,
+    totalQrCodes,
+    activeQrCodes,
+    reviewsAgg,
+    preGenAgg,
+  ] = await Promise.all([
+    prisma.company.count({ where: { id: { in: allCompanyIds } } }),
+    prisma.company.count({ where: { id: { in: allCompanyIds }, isActive: true } }),
+    prisma.company.count({ where: { id: { in: allCompanyIds }, isActive: false } }),
+    prisma.qrCode.count({ where: { companyId: { in: allCompanyIds } } }),
+    prisma.qrCode.count({ where: { companyId: { in: allCompanyIds }, isActive: true } }),
+    prisma.review.groupBy({
+      by: ["status"],
+      where: { companyId: { in: allCompanyIds } },
+      _count: { id: true },
+      orderBy: { status: "asc" },
+    }),
+    prisma.preGeneratedReview.groupBy({
+      by: ["isUsed"],
+      where: { companyId: { in: allCompanyIds } },
+      _count: { id: true },
+    }),
+  ]);
+
+  // Calculate average rating
+  const avgRatingResult = await prisma.review.aggregate({
+    where: { companyId: { in: allCompanyIds }, status: "SUBMITTED" },
+    _avg: { rating: true },
+  });
+
+  const available = preGenAgg.find(g => g.isUsed === false)?._count.id || 0;
+  const used = preGenAgg.find(g => g.isUsed === true)?._count.id || 0;
+
+  return {
+    totalCompanies,
+    activeCompanies,
+    inactiveCompanies,
+    totalQrCodes,
+    activeQrCodes,
+    totalReviews: reviewsAgg.reduce((sum, r) => sum + r._count.id, 0),
+    reviewsByStatus: reviewsAgg.map(r => ({ status: r.status, count: r._count.id })),
+    averageRating: avgRatingResult._avg.rating || null,
+    preGeneratedReviews: {
+      total: available + used,
+      available,
+      used,
+    },
+  };
 }

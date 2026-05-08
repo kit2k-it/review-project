@@ -1,29 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createQrCodeAction, deleteQrCodeAction, toggleQrCodeAction, updateQrCodeExpiryAction } from "@/actions/qr-code";
+import { updateCompanySocialLinksAction } from "@/actions/company";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import { generateQrDataUrl } from "@/lib/qr";
 import QRCode from "qrcode";
+import { toPng, toCanvas } from "html-to-image";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { QrCode, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check, Calendar } from "lucide-react";
+import { QrCode as QrCodeIcon, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check, Calendar } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useCallback } from "react";
+import type { Company } from "@prisma/client";
 
 interface QrCodeData {
   id: string;
   code: string;
   isActive: boolean;
-  socialLinks: any;
   _count: { reviews: number };
   expiresAt?: Date | null;
 }
 
 interface Props {
-  company: { id: string; name: string };
+  company: Company;
   qrCodes: QrCodeData[];
   pool?: { available: number; used: number; pendingJob: boolean };
   canManage: boolean;
@@ -33,23 +35,38 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool,
   const [qrCodes, setQrCodes] = useState<QrCodeData[]>(initialQrCodes);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [socialLinks, setSocialLinks] = useState({ facebook: "", tiktok: "" });
+  const [socialLinks, setSocialLinks] = useState<{ facebook: string; tiktok: string }>({
+    facebook: (company.socialLinks as any)?.facebook || "",
+    tiktok: (company.socialLinks as any)?.tiktok || "",
+  });
+  const [savingSocial, setSavingSocial] = useState(false);
 
   async function handleCreate() {
     setCreating(true);
-    const links: { facebook?: string; tiktok?: string } = {};
-    if (socialLinks.facebook) links.facebook = socialLinks.facebook;
-    if (socialLinks.tiktok) links.tiktok = socialLinks.tiktok;
-    const result = await createQrCodeAction(
-      company.id,
-      Object.keys(links).length > 0 ? links : undefined
-    );
-    setCreating(false);
-    if (result.success && result.qrCode) {
-      setQrCodes((prev) => [
-        { ...result.qrCode!, _count: { reviews: 0 }, socialLinks: result.qrCode!.socialLinks },
-        ...prev,
-      ]);
+    try {
+      const result = await createQrCodeAction(company.id);
+      setCreating(false);
+      if (result.success && result.qrCode) {
+        setQrCodes((prev) => [
+          { ...result.qrCode!, _count: { reviews: 0 } },
+          ...prev,
+        ]);
+      }
+    } catch (error) {
+      setCreating(false);
+      console.error("Failed to create QR code:", error);
+    }
+  }
+
+  async function handleSaveSocialLinks() {
+    setSavingSocial(true);
+    try {
+      const result = await updateCompanySocialLinksAction(company.id, socialLinks);
+      if (result && "error" in result) {
+        alert((result as { error: string }).error);
+      }
+    } finally {
+      setSavingSocial(false);
     }
   }
 
@@ -83,10 +100,19 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool,
         </Button>
       </div>
 
-      {/* Social links */}
       <Card>
         <CardContent className="p-4">
-          <p className="mb-2 text-sm font-medium text-text">Liên kết mạng xã hội (tùy chọn)</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-text">Liên kết mạng xã hội (chung cho tất cả QR codes)</p>
+            <Button
+              onClick={handleSaveSocialLinks}
+              disabled={savingSocial}
+              size="sm"
+              variant="outline"
+            >
+              {savingSocial ? "Đang lưu..." : "Lưu"}
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-3">
             <input
               value={socialLinks.facebook}
@@ -123,7 +149,7 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool,
       {qrCodes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <QrCode className="h-12 w-12 text-gray-300 mb-4" />
+            <QrCodeIcon className="h-12 w-12 text-gray-300 mb-4" />
             <p className="text-lg font-medium text-gray-400">Chưa có mã QR nào</p>
             <p className="text-sm text-gray-400">Tạo mã QR đầu tiên để bắt đầu</p>
           </CardContent>
@@ -137,6 +163,7 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool,
               onDelete={handleDelete}
               onToggle={handleToggle}
               canManage={canManage}
+              socialLinks={company.socialLinks as any}
             />
           ))}
         </div>
@@ -150,15 +177,18 @@ function QrCodeCard({
   onDelete,
   onToggle,
   canManage,
+  socialLinks,
 }: {
   qr: QrCodeData;
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
   canManage: boolean;
+  socialLinks?: { facebook?: string; tiktok?: string } | null;
 }) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBgSize, setPreviewBgSize] = useState<{width: number, height: number} | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [editingExpiry, setEditingExpiry] = useState(false);
@@ -217,50 +247,23 @@ function QrCodeCard({
     generateQrDataUrl(scanUrl).then(setQrDataUrl);
   }, [scanUrl]);
 
-  // Helper function to generate QR code with background
+  // Helper function to generate QR code with background using html-to-image
   const generateQrDataUrlWithBackground = useCallback(
-    async (data: string, backgroundUrl: string, width: number = 300): Promise<string> => {
+    async (data: string, backgroundUrl: string): Promise<string> => {
       try {
-        console.log('[QR Debug] Starting generateQrDataUrlWithBackground');
+        console.log('[QR Debug] Starting generateQrDataUrlWithBackground with html-to-image');
         console.log('[QR Debug] Data:', data);
         console.log('[QR Debug] Background URL:', backgroundUrl);
-        console.log('[QR Debug] Width:', width);
 
-        // Generate QR code as data URL with WHITE background (we'll make it transparent)
-        console.log('[QR Debug] Generating QR code as data URL with white background...');
-        const qrDataUrlWhite = await QRCode.toDataURL(data, {
-          width,
-          margin: 2,
-          color: {
-            dark: "#000000",
-            light: "#FFFFFF", // White background - will be made transparent
-          },
-          errorCorrectionLevel: "H",
-        });
-        console.log('[QR Debug] QR data URL generated, length:', qrDataUrlWhite.length);
-
-        // Create QR image from data URL
-        console.log('[QR Debug] Creating QR image from data URL...');
-        const qrImg = new window.Image();
-        qrImg.src = qrDataUrlWhite;
-
-        await new Promise<void>((resolve) => {
-          qrImg.onload = () => {
-            console.log('[QR Debug] QR image loaded');
-            resolve();
-          };
-        });
-
-        // Load background image
-        console.log('[QR Debug] Loading background image...');
+        // Load background image to get dimensions
+        console.log('[QR Debug] Loading background image to get dimensions...');
         const bgImg = new window.Image();
         bgImg.crossOrigin = "anonymous";
         bgImg.src = backgroundUrl;
 
-        await new Promise<void>((resolve, reject) => {
+        const bgLoaded = new Promise<void>((resolve, reject) => {
           bgImg.onload = () => {
-            console.log('[QR Debug] Background image loaded successfully');
-            console.log('[QR Debug] Image dimensions:', bgImg.width, 'x', bgImg.height);
+            console.log('[QR Debug] Background image loaded:', `${bgImg.width}x${bgImg.height}`);
             resolve();
           };
           bgImg.onerror = () => {
@@ -269,77 +272,79 @@ function QrCodeCard({
           };
         });
 
-        // Create temp canvas to make QR white background transparent
-        console.log('[QR Debug] Creating temp canvas to make QR white pixels transparent...');
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = width;
-        tempCanvas.height = width;
-        const tempCtx = tempCanvas.getContext("2d");
-        if (!tempCtx) throw new Error("Cannot get temp canvas context");
+        await bgLoaded;
 
-        // Draw QR with white background to temp canvas
-        tempCtx.drawImage(qrImg, 0, 0, width, width);
-
-        // Get image data and make white pixels transparent
-        const imageData = tempCtx.getImageData(0, 0, width, width);
-        const dataArr = imageData.data;
-        for (let i = 0; i < dataArr.length; i += 4) {
-          // If pixel is white or near-white (RGB all 255), make it transparent
-          if (dataArr[i] === 255 && dataArr[i + 1] === 255 && dataArr[i + 2] === 255) {
-            dataArr[i + 3] = 0; // Set alpha to 0 (transparent)
-          }
-        }
-        tempCtx.putImageData(imageData, 0, 0);
-        console.log('[QR Debug] White pixels made transparent');
-
-        // Now create final canvas with background (9:16 aspect ratio)
-        console.log('[QR Debug] Creating final canvas with 9:16 aspect ratio...');
-        const canvasWidth = width; // e.g., 300
-        const canvasHeight = Math.round(width * (16 / 9)); // e.g., 533 for 9:16
-        const canvas = document.createElement("canvas");
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Cannot get final canvas context");
-
-        // Calculate cover positioning: fit background to cover entire canvas while maintaining aspect ratio
-        const bgAspectRatio = bgImg.width / bgImg.height;
-        const canvasAspectRatio = canvasWidth / canvasHeight;
-
-        let drawWidth: number, drawHeight: number, offsetX: number, offsetY: number;
-
-        if (bgAspectRatio > canvasAspectRatio) {
-          // Background is wider than canvas - crop horizontally
-          drawHeight = canvasHeight;
-          drawWidth = bgImg.width * (canvasHeight / bgImg.height);
-          offsetX = (canvasWidth - drawWidth) / 2;
-          offsetY = 0;
-        } else {
-          // Background is taller than canvas - crop vertically
-          drawWidth = canvasWidth;
-          drawHeight = bgImg.height * (canvasWidth / bgImg.width);
-          offsetX = 0;
-          offsetY = (canvasHeight - drawHeight) / 2;
-        }
-
-        console.log('[QR Debug] Drawing background with cover fit:', {
-          bgSize: `${bgImg.width}x${bgImg.height}`,
-          canvasSize: `${canvasWidth}x${canvasHeight}`,
-          drawSize: `${drawWidth.toFixed(1)}x${drawHeight.toFixed(1)}`,
-          offset: { x: offsetX.toFixed(1), y: offsetY.toFixed(1) }
+        // Generate QR code as data URL - size is 45% of background width
+        const qrSize = Math.round(bgImg.width * 0.45);
+        console.log('[QR Debug] Generating QR code as data URL with size:', qrSize);
+        const qrDataUrl = await QRCode.toDataURL(data, {
+          width: qrSize,
+          margin: 2,
+          color: {
+            dark: "#000000",
+            light: "#FFFFFF",
+          },
+          errorCorrectionLevel: "H",
         });
-        ctx.drawImage(bgImg, offsetX, offsetY, drawWidth, drawHeight);
+        console.log('[QR Debug] QR data URL generated, length:', qrDataUrl.length);
 
-        // Draw transparent QR on top (45% of canvas width, left-aligned with 20px margin, vertically centered)
-        const qrSize = canvasWidth * 0.45; // QR code is 45% of canvas width
-        const qrOffsetX = 28; // Fixed 20px from left edge
-        const qrOffsetY = (canvasHeight - qrSize) / 2.2; // Vertically centered
-        console.log('[QR Debug] Drawing transparent QR with size:', qrSize, 'offset:', { x: qrOffsetX, y: qrOffsetY });
-        ctx.drawImage(tempCanvas, qrOffsetX, qrOffsetY, qrSize, qrSize);
+        // Create hidden container for rendering
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        container.style.top = '-9999px';
+        container.style.overflow = 'hidden';
 
-        const resultDataUrl = canvas.toDataURL("image/png");
-        console.log('[QR Debug] Canvas toDataURL complete, result length:', resultDataUrl.length);
-        return resultDataUrl;
+        // Create wrapper with relative positioning - size matches background
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        wrapper.style.width = `${bgImg.width}px`;
+        wrapper.style.height = `${bgImg.height}px`;
+        wrapper.style.display = 'inline-block';
+
+        // Add background image
+        const bgDiv = document.createElement('img');
+        bgDiv.src = backgroundUrl;
+        bgDiv.style.width = '100%';
+        bgDiv.style.height = '100%';
+        bgDiv.style.display = 'block';
+        wrapper.appendChild(bgDiv);
+
+        // Add QR code overlay - 45% of background width, left 10% of background width, vertically centered
+        const qrOffsetX = Math.round(bgImg.width * 0.1);
+        const qrOffsetY = Math.round((bgImg.height - qrSize) / 2.2);
+
+        const qrDiv = document.createElement('img');
+        qrDiv.src = qrDataUrl;
+        qrDiv.style.position = 'absolute';
+        qrDiv.style.left = `${qrOffsetX}px`;
+        qrDiv.style.top = `${qrOffsetY}px`;
+        qrDiv.style.width = `${qrSize}px`;
+        qrDiv.style.height = `${qrSize}px`;
+        qrDiv.style.objectFit = 'contain';
+        wrapper.appendChild(qrDiv);
+
+        container.appendChild(wrapper);
+        document.body.appendChild(container);
+
+        try {
+          // Use html-to-image to capture with high quality
+          console.log('[QR Debug] Capturing with html-to-image, pixelRatio: 2...');
+          const dataUrl = await toPng(wrapper, {
+            pixelRatio: 2, // Higher quality
+            backgroundColor: undefined,
+          });
+          console.log('[QR Debug] Capture complete, data URL length:', dataUrl.length);
+
+          // Cleanup
+          document.body.removeChild(container);
+
+          return dataUrl;
+        } catch (captureError) {
+          console.error('[QR Debug] html-to-image capture failed:', captureError);
+          document.body.removeChild(container);
+          throw captureError;
+        }
       } catch (error) {
         console.error("Failed to generate QR with background:", error);
         throw error;
@@ -399,6 +404,18 @@ function QrCodeCard({
     try {
       const result = await generateQrDataUrlWithBackground(scanUrl, backgroundUrl);
       setPreviewUrl(result);
+
+      // Get background image dimensions for preview display
+      const bgImg = new window.Image();
+      bgImg.crossOrigin = "anonymous";
+      bgImg.src = backgroundUrl;
+      await new Promise<void>((resolve) => {
+        bgImg.onload = () => {
+          setPreviewBgSize({ width: bgImg.width, height: bgImg.height });
+          resolve();
+        };
+      });
+
       setShowPreview(true);
     } catch (error) {
       console.error('[QR Debug] Preview failed:', error);
@@ -423,7 +440,7 @@ function QrCodeCard({
     setTimeout(() => setPreviewUrl(null), 300);
   }
 
-  const socials = qr.socialLinks as { facebook?: string; tiktok?: string } | null;
+  const socials = socialLinks as { facebook?: string; tiktok?: string } | null;
 
   return (
     <>
@@ -605,14 +622,16 @@ function QrCodeCard({
             </div>
             <div className="p-6 flex justify-center">
               {previewUrl && (
-                <Image
-                  src={previewUrl}
-                  alt="QR Code with Background"
-                  width={300}
-                  height={533}
-                  className="rounded-lg shadow-lg"
-                  unoptimized
-                />
+                <div style={{ maxWidth: '100%', overflow: 'auto' }}>
+                  <Image
+                    src={previewUrl}
+                    alt="QR Code with Background"
+                    width={previewBgSize?.width || 300}
+                    height={previewBgSize?.height || 533}
+                    className="rounded-lg shadow-lg"
+                    unoptimized
+                  />
+                </div>
               )}
             </div>
             <div className="flex justify-end gap-3 p-4 border-t">

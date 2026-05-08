@@ -115,6 +115,10 @@ async function main() {
       googleMapsUrl: "https://maps.google.com/?q=Nhà+hàng+Hương+Việt",
       googleReviewUrl: "https://www.google.com/maps/place/?q=place_id:demo",
       hashtags: "vietnamese,restaurant,hochiminh",
+      socialLinks: {
+        facebook: "https://facebook.com/huongviet",
+        tiktok: "https://tiktok.com/@huongviet",
+      },
     },
   });
   console.log(`✅ Created demo company: ${company.name}`);
@@ -126,7 +130,6 @@ async function main() {
     create: {
       companyId: company.id,
       code: "DEMO1234",
-      socialLinks: { facebook: "https://facebook.com", tiktok: "" },
     },
   });
   console.log(`✅ Created demo QR code: ${qrCode.code}`);

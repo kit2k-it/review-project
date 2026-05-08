@@ -23,14 +23,10 @@ export const companySchema = z.object({
   placeId: z.string().optional(),
   logoUrl: z.string().url().optional().or(z.literal("")),
   complaintEmail: z.string().email("Email không hợp lệ").optional().or(z.literal("")),
-});
-
-export const qrCodeSchema = z.object({
-  companyId: z.string().min(1, "Vui lòng chọn khách hàng"),
   socialLinks: z
     .object({
-      facebook: z.string().url().optional(),
-      tiktok: z.string().url().optional(),
+      facebook: z.string().url("URL Facebook không hợp lệ").optional().or(z.literal("")),
+      tiktok: z.string().url("URL TikTok không hợp lệ").optional().or(z.literal("")),
     })
     .optional(),
 });
@@ -51,5 +47,4 @@ export const placesSearchSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CompanyInput = z.infer<typeof companySchema>;
-export type QrCodeInput = z.infer<typeof qrCodeSchema>;
 export type ReviewSubmitInput = z.infer<typeof reviewSubmitSchema>;

@@ -56,6 +56,7 @@ model Company {
   placeId             String? // Google Places ID for dedup
   logoUrl             String? // Cloudinary URL
   complaintEmail      String? // Email nhận khiếu nại từ khách hàng
+  socialLinks         Json? // { facebook?: string, tiktok?: string } - Links to company's social media
   isActive            Boolean              @default(true) // false = đã huỷ, không hiển thị
   qrCodes             QrCode[]
   reviews             Review[]
@@ -102,7 +103,6 @@ model QrCode {
   companyId       String
   company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   code            String   @unique // Short unique code: "ABC123XY"
-  socialLinks     Json? // Stored as: { facebook?: string, tiktok?: string }
   isActive        Boolean  @default(true)
   expiresAt       DateTime? // Null = never expires, otherwise expires at this time
   reviews         Review[]

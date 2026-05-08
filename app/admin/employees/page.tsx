@@ -23,6 +23,7 @@ export default async function AdminEmployeesPage() {
       companies: {
         select: {
           id: true,
+          name: true,
         },
       },
     },
@@ -55,40 +56,55 @@ export default async function AdminEmployeesPage() {
     })
   );
 
-  // Helper function to count accessible companies for a user
-  const getAccessibleCompanyCount = (user: typeof usersWithPerms[0]) => {
-    // If user is ADMIN (shouldn't be in this list, but just in case)
+  // Helper function to get accessible companies for a user
+  const getAccessibleCompanies = (user: typeof usersWithPerms[0]) => {
+    // ADMIN sees all companies
     if (user.role === "ADMIN") {
-      return totalCompanies;
+      return { companies: [], isAll: true };
     }
 
-    // Check if user has global companies:read or companies:manage permission
-    const hasGlobalRead = user.permissions.some(
-      (p) => p.permission.code === "companies:read" && p.companyId === null
-    );
-    const hasGlobalManage = user.permissions.some(
-      (p) => p.permission.code === "companies:manage" && p.companyId === null
-    );
+    // For EMPLOYEE and CLIENT: only show companies they own or have specific permissions for
+    // Map: companyId -> { name, permissions }
+    const companyMap = new Map<string, { name: string; permissions: string[]; isOwner: boolean }>();
 
-    if (hasGlobalRead || hasGlobalManage) {
-      return totalCompanies;
-    }
-
-    // Count unique companies from user-specific permissions
-    const companyIdsFromPerms = new Set<string>();
+    // Add companies from permissions
     user.permissions.forEach((p) => {
-      if (p.companyId) {
-        companyIdsFromPerms.add(p.companyId);
+      if (p.companyId && p.company) {
+        if (!companyMap.has(p.companyId)) {
+          companyMap.set(p.companyId, {
+            name: p.company.name,
+            permissions: [],
+            isOwner: false,
+          });
+        }
+        const entry = companyMap.get(p.companyId)!;
+        if (!entry.permissions.includes(p.permission.code)) {
+          entry.permissions.push(p.permission.code);
+        }
       }
     });
 
-    // Count companies they own
-    const ownedCompanyIds = new Set(user.companies.map(c => c.id));
+    // Add companies they own
+    user.companies.forEach((c) => {
+      if (companyMap.has(c.id)) {
+        companyMap.get(c.id)!.isOwner = true;
+      } else {
+        companyMap.set(c.id, {
+          name: c.name,
+          permissions: [],
+          isOwner: true,
+        });
+      }
+    });
 
-    // Merge both sets
-    const allAccessible = new Set([...companyIdsFromPerms, ...ownedCompanyIds]);
+    const companies = Array.from(companyMap.entries()).map(([id, info]) => ({
+      id,
+      name: info.name,
+      isOwner: info.isOwner,
+      permissions: info.permissions,
+    }));
 
-    return allAccessible.size;
+    return { companies, isAll: false };
   };
 
   // Helper function to group and deduplicate permissions
@@ -122,9 +138,9 @@ export default async function AdminEmployeesPage() {
   };
 
   // Get companies count for each user
-  const usersWithCompanyCount = usersWithPerms.map((user) => ({
+  const usersWithCompanyInfo = usersWithPerms.map((user) => ({
     ...user,
-    accessibleCompanyCount: getAccessibleCompanyCount(user),
+    companyInfo: getAccessibleCompanies(user),
   }));
 
   return (
@@ -163,7 +179,7 @@ export default async function AdminEmployeesPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {usersWithCompanyCount.map((user) => {
+            {usersWithCompanyInfo.map((user) => {
               const groupedPerms = groupPermissions(user.permissions);
 
               return (
@@ -219,8 +235,22 @@ export default async function AdminEmployeesPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {user.accessibleCompanyCount > 0 ? (
-                      <span>{user.accessibleCompanyCount} công ty</span>
+                    {user.companyInfo.isAll ? (
+                      <Link
+                        href="/companies"
+                        className="text-blue-600 hover:text-blue-900 font-medium"
+                        title="Tất cả công ty"
+                      >
+                        Tất cả công ty
+                      </Link>
+                    ) : user.companyInfo.companies.length > 0 ? (
+                      <Link
+                        href={`/admin/employees/${user.id}/companies`}
+                        className="text-blue-600 hover:text-blue-900 font-medium"
+                        title="Xem danh sách công ty"
+                      >
+                        {user.companyInfo.companies.length} công ty
+                      </Link>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}

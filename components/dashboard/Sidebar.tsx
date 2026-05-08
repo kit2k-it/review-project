@@ -13,6 +13,7 @@ import {
   UserRound,
   User,
   BarChart3,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,16 +25,19 @@ const navItemsByRole: Record<string, { href: string; label: string; icon: React.
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
     { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
+    { href: "/admin/background-jobs", label: "Background Jobs", icon: Activity },
   ],
   CLIENT: [
     // Không hiển thị "Tổng quan" cho CLIENT
-    { href: "/companies", label: "Khách hàng", icon: Building2 },
+    { href: "/companies", label: "Cửa hàng của tôi", icon: Building2 },
     { href: "/reviews", label: "Đánh giá", icon: Star },
   ],
   EMPLOYEE: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },
-    { href: "/companies", label: "Khách hàng", icon: Building2 },
+    { href: "/employee/companies", label: "Khách hàng", icon: Building2 },
     { href: "/reviews", label: "Đánh giá", icon: Star },
+    { href: "/employee/users", label: "Tài khoản", icon: Users },
+    { href: "/employee/reports", label: "Báo cáo", icon: BarChart3 },
   ],
   USER: [
     { href: "/", label: "Tổng quan", icon: LayoutDashboard },

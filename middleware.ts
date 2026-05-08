@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "fallback-secret-change-in-production"
-);
 
 const SESSION_COOKIE = "qrr_session";
 
@@ -30,38 +25,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session cookie
+  // Check session cookie exists
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (!payload.sub) {
-      throw new Error("Invalid token");
-    }
-
-    // Role-based route protection
-    const role = payload.role as string;
-
-    if (pathname.startsWith("/admin")) {
-      if (role !== "ADMIN") return NextResponse.redirect(new URL("/", req.url));
-    }
-
-    if (pathname.startsWith("/employee")) {
-      if (role !== "EMPLOYEE" && role !== "CLIENT" && role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-    }
-
+  // For admin/employee routes, we just check if the cookie exists
+  // Detailed permission checks are done in the page components
+  if (pathname.startsWith("/admin") || pathname.startsWith("/employee")) {
+    // Allow access - page components will verify session and permissions
     return NextResponse.next();
-  } catch {
-    // Invalid token — redirect to login
-    const response = NextResponse.redirect(new URL("/login", req.url));
-    response.cookies.delete(SESSION_COOKIE);
-    return response;
   }
+
+  return NextResponse.next();
 }
 
 export const config = {

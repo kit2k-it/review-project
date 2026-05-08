@@ -8,7 +8,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 // ==========================================
-// LIST USERS (Admin only)
+// LIST USERS
+// Admin: all roles | Employee with user:create: only CLIENT role
 // ==========================================
 export async function listUsersAction(params: {
   search?: string;
@@ -16,7 +17,20 @@ export async function listUsersAction(params: {
   page?: number;
   pageSize?: number;
 }) {
-  await requireAdmin();
+  const session = await getSession();
+  if (!session?.user) {
+    return { users: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
+  }
+
+  const isAdmin = session.user.role === "ADMIN";
+  const canCreateUser = await hasPermission(session.user.id, "user:create");
+
+  if (!isAdmin && !canCreateUser) {
+    return { users: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
+  }
+
+  // If not admin, force role filter to CLIENT
+  const roleFilter = !isAdmin && canCreateUser ? "CLIENT" : (params.role || undefined);
 
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
@@ -28,7 +42,7 @@ export async function listUsersAction(params: {
         { name: { contains: params.search, mode: "insensitive" as const } },
       ],
     }),
-    ...(params.role && { role: params.role as any }),
+    ...(roleFilter && { role: roleFilter as any }),
   };
 
   const [users, total] = await Promise.all([
@@ -100,8 +114,9 @@ export async function createUserAction(data: z.infer<typeof createUserSchema>) {
     if (!hasCreatePerm) {
       return { error: "Không có quyền tạo tài khoản" };
     }
-    if (parsed.data.role !== "EMPLOYEE") {
-      return { error: "Chỉ quản trị viên mới có thể tạo tài khoản vai trò này" };
+    // Employees can only create CLIENT accounts
+    if (creatorRole === "EMPLOYEE" && parsed.data.role !== "CLIENT") {
+      return { error: "Nhân viên chỉ được tạo tài khoản khách hàng" };
     }
   }
 

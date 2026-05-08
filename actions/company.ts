@@ -12,7 +12,21 @@ import { z } from "zod";
 // ==========================================
 export async function createCompanyAction(
   prevState: { error?: string } | null,
-  data: { name: string; address: string; category: string; phone: string; keywords: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
+  data: {
+    name: string;
+    address: string;
+    category: string;
+    phone: string;
+    keywords: string;
+    googleMapsUrl: string;
+    googleReviewUrl: string;
+    hashtags: string;
+    placeId: string;
+    logoUrl?: string;
+    complaintEmail?: string;
+    facebook?: string;
+    tiktok?: string;
+  }
 ) {
   const user = await requireAuth();
 
@@ -33,8 +47,12 @@ export async function createCompanyAction(
     googleReviewUrl: data.googleReviewUrl,
     hashtags: data.hashtags,
     placeId: data.placeId,
-    logoUrl: "",
+    logoUrl: data.logoUrl || "",
     complaintEmail: data.complaintEmail || "",
+    socialLinks: (data.facebook || data.tiktok) ? {
+      facebook: data.facebook || undefined,
+      tiktok: data.tiktok || undefined,
+    } : undefined,
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -57,6 +75,7 @@ export async function createCompanyAction(
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
         complaintEmail: parsed.data.complaintEmail || null,
+        socialLinks: parsed.data.socialLinks || undefined,
       },
     });
 
@@ -76,7 +95,20 @@ export async function createCompanyAction(
 // ==========================================
 export async function updateCompanyAction(
   id: string,
-  data: { name: string; address: string; category: string; phone: string; keywords: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; logoUrl?: string; complaintEmail?: string }
+  data: {
+    name: string;
+    address: string;
+    category: string;
+    phone: string;
+    keywords: string;
+    googleMapsUrl: string;
+    googleReviewUrl: string;
+    hashtags: string;
+    placeId: string;
+    logoUrl?: string;
+    complaintEmail?: string;
+    socialLinks?: { facebook?: string; tiktok?: string } | null;
+  }
 ) {
   const user = await requireAuth();
 
@@ -100,6 +132,7 @@ export async function updateCompanyAction(
     placeId: data.placeId,
     logoUrl: data.logoUrl || "",
     complaintEmail: data.complaintEmail || "",
+    socialLinks: data.socialLinks || undefined,
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -122,6 +155,7 @@ export async function updateCompanyAction(
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
         complaintEmail: parsed.data.complaintEmail || null,
+        socialLinks: parsed.data.socialLinks || undefined,
       },
     });
 
@@ -174,10 +208,35 @@ export async function deleteCompanyAction(id: string) {
     return { error: "Không có quyền xóa" };
   }
 
-  await prisma.company.delete({ where: { id } });
+  // Check if company exists
+  const company = await prisma.company.findUnique({ where: { id } });
+  if (!company) {
+    return { error: "Khách hàng không tồn tại" };
+  }
 
-  revalidatePath("/companies");
-  return { success: true };
+  try {
+    // Delete related records first to avoid foreign key constraint errors
+    // 1. Delete reviews
+    await prisma.review.deleteMany({ where: { companyId: id } });
+
+    // 2. Delete QR codes
+    await prisma.qrCode.deleteMany({ where: { companyId: id } });
+
+    // 3. Delete customer contacts
+    await prisma.customerContact.deleteMany({ where: { companyId: id } });
+
+    // 4. Delete user permissions related to this company
+    await prisma.userPermission.deleteMany({ where: { companyId: id } });
+
+    // 5. Finally delete the company
+    await prisma.company.delete({ where: { id } });
+
+    revalidatePath("/companies");
+    return { success: true };
+  } catch (error) {
+    console.error("Delete company error:", error);
+    return { error: "Không thể xóa khách hàng. Vui lòng thử lại." };
+  }
 }
 
 // ==========================================
@@ -249,4 +308,39 @@ export async function listCompaniesAction(params: {
       totalPages: Math.ceil(total / pageSize),
     },
   };
+}
+
+// ==========================================
+// UPDATE COMPANY SOCIAL LINKS (Facebook/TikTok)
+// ==========================================
+export async function updateCompanySocialLinksAction(
+  companyId: string,
+  socialLinks: { facebook?: string; tiktok?: string }
+) {
+  const user = await requireAuth();
+
+  // Check permission: global companies:manage OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  const isOwner = await isCompanyOwner(user.id, companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền cập nhật liên kết mạng xã hội" };
+  }
+
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) return { error: "Khách hàng không tồn tại" };
+
+  try {
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { socialLinks: socialLinks || undefined },
+    });
+
+    revalidatePath(`/companies/${companyId}`);
+    revalidatePath(`/companies/${companyId}/qr-codes`);
+    return { success: true };
+  } catch (error) {
+    console.error("Update social links error:", error);
+    return { error: "Không thể cập nhật liên kết mạng xã hội" };
+  }
 }

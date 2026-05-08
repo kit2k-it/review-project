@@ -5,15 +5,18 @@ import { Card } from "@/components/ui/Card";
 
 interface ChoiceScreenProps {
   data: {
-    company: { name: string; address: string };
-    socialLinks?: { facebook?: string; tiktok?: string };
+    company: {
+      name: string;
+      address: string;
+      socialLinks?: { facebook?: string; tiktok?: string };
+    };
   };
   onGoodReview: () => void;
   onComplaint: () => void;
 }
 
 export default function ChoiceScreen({ data, onGoodReview, onComplaint }: ChoiceScreenProps) {
-  const socials = data.socialLinks;
+  const socials = data.company.socialLinks;
 
   return (
     <div className="flex min-h-screen flex-col items-center px-4 py-8">

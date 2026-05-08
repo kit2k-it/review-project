@@ -39,6 +39,7 @@ export async function GET(
           logoUrl: true,
           hashtags: true,
           complaintEmail: true,
+          socialLinks: true,
         },
       },
     },
@@ -142,7 +143,7 @@ export async function GET(
       googleReviewUrl: company.googleReviewUrl,
       hashtags: company.hashtags,
       complaintEmail: company.complaintEmail,
+      socialLinks: company.socialLinks,
     },
-    socialLinks: qrCode.socialLinks,
   });
 }

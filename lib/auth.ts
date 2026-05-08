@@ -194,7 +194,7 @@ export async function requireAdmin() {
 
 export async function requireClient() {
   const session = await getSession();
-  if (!session?.user || (session.user.role !== "CLIENT" && session.user.role !== "ADMIN")) {
+  if (!session?.user || !["CLIENT", "ADMIN", "EMPLOYEE"].includes(session.user.role)) {
     redirect("/login");
   }
   return session.user;
