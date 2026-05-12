@@ -121,6 +121,7 @@ export default function ComplaintForm({ data, onBack }: ComplaintFormProps) {
           customerName: customerName || undefined,
           customerPhone: customerPhone || undefined,
           content: content.trim(),
+          rating: data.rating, // Send the rating from the review
         }),
       });
 

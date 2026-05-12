@@ -207,9 +207,22 @@ export async function generateReviewsForCompany(companyId: string) {
     },
   });
 
-  // Execute asynchronously (don't await)
-  executeReviewGeneration(job.id).catch((err) => {
-    console.error(`[BackgroundJob] Job ${job.id} failed:`, err);
+  // Execute asynchronously with proper error handling
+  executeReviewGeneration(job.id).catch(async (err) => {
+    console.error(`[BackgroundJob] Job ${job.id} failed before execution:`, err);
+    // Update job status to FAILED if it's still PENDING (didn't get to update itself)
+    try {
+      await prisma.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          errorMsg: `Failed to start: ${String(err)}`,
+          attempts: { increment: 1 },
+        },
+      });
+    } catch (updateErr) {
+      console.error(`[BackgroundJob] Failed to update job status for ${job.id}:`, updateErr);
+    }
   });
 }
 
@@ -217,14 +230,19 @@ export async function executeReviewGeneration(jobId: string) {
   const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "10");
   const BATCH_SIZE = Number(process.env.REVIEW_BATCH_SIZE || "15");
 
+  const job = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
+  if (!job) {
+    console.error(`[BackgroundJob] Job ${jobId} not found`);
+    throw new Error("Job not found");
+  }
+
+  console.log(`[BackgroundJob] Starting job ${jobId} for company ${job.companyId}`);
+
   // Mark job as running
   await prisma.backgroundJob.update({
     where: { id: jobId },
     data: { status: "RUNNING", startedAt: new Date(), attempts: { increment: 1 } },
   });
-
-  const job = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
-  if (!job) return;
 
   const company = await prisma.company.findUnique({ where: { id: job.companyId } });
   if (!company) {
@@ -232,7 +250,7 @@ export async function executeReviewGeneration(jobId: string) {
       where: { id: jobId },
       data: { status: "FAILED", errorMsg: "Company not found" },
     });
-    return;
+    throw new Error("Company not found");
   }
 
   // Check current pool size
@@ -254,6 +272,7 @@ export async function executeReviewGeneration(jobId: string) {
     // Dynamic import to avoid bundling OpenAI in main thread
     const { generateReviewTexts } = await import("@/lib/openai");
 
+    console.log(`[BackgroundJob] ${jobId} generating ${BATCH_SIZE} reviews for ${company.name}...`);
     const reviewTexts = await generateReviewTexts(
       company.name,
       company.category,
@@ -280,6 +299,7 @@ export async function executeReviewGeneration(jobId: string) {
 
     console.log(`[BackgroundJob] ${jobId} completed — generated ${reviewTexts.length} reviews`);
   } catch (error) {
+    console.error(`[BackgroundJob] ${jobId} failed:`, error);
     const attempts = job.attempts + 1;
     if (attempts >= job.maxAttempts) {
       await prisma.backgroundJob.update({

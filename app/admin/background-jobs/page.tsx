@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { getBackgroundJobs, getJobStats, retryJobAction, cancelJobAction } from "@/actions/background-job";
+import { getBackgroundJobs, getJobStats, retryJobAction, cancelJobAction, retryAllPendingJobsAction } from "@/actions/background-job";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
@@ -91,6 +91,21 @@ export default async function BackgroundJobsPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Action Buttons */}
+      {(stats.byStatus.PENDING || 0) > 0 && (
+        <div className="flex justify-end">
+          <form action={async () => {
+            "use server";
+            await retryAllPendingJobsAction();
+          }}>
+            <Button type="submit" variant="outline" size="sm" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Retry All Pending ({stats.byStatus.PENDING})
+            </Button>
+          </form>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>

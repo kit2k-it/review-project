@@ -4,7 +4,7 @@ import { sendComplaintEmail } from "@/lib/email";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { complaintEmail, companyName, customerName, customerPhone, content } = body;
+    const { complaintEmail, companyName, customerName, customerPhone, content, rating } = body;
 
     if (!complaintEmail || !complaintEmail.includes("@")) {
       return NextResponse.json({ error: "Email khiếu nại không hợp lệ" }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       customerName,
       customerPhone,
       content: content.trim(),
+      rating: rating, // Pass rating to email
     });
 
     return NextResponse.json({ success: true });

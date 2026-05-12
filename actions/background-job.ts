@@ -62,6 +62,49 @@ export async function getBackgroundJobs(params: {
 }
 
 /**
+ * Retry all pending jobs
+ */
+export async function retryAllPendingJobsAction() {
+  const admin = await requireAdmin();
+
+  const pendingJobs = await prisma.backgroundJob.findMany({
+    where: { status: "PENDING" },
+    select: { id: true },
+  });
+
+  const results = [];
+  for (const job of pendingJobs) {
+    try {
+      // Reset job to PENDING (in case it's stuck) and increment attempts tracking
+      await prisma.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          attempts: { increment: 1 },
+          errorMsg: null,
+        },
+      });
+
+      // Execute the job
+      const { executeReviewGeneration } = await import("@/actions/review");
+      await executeReviewGeneration(job.id);
+      results.push({ id: job.id, status: "success" });
+    } catch (error) {
+      await prisma.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          errorMsg: String(error),
+        },
+      });
+      results.push({ id: job.id, status: "failed", error: String(error) });
+    }
+  }
+
+  revalidatePath("/admin/background-jobs");
+  return { success: true, total: pendingJobs.length, results };
+}
+
+/**
  * Retry a failed job - reset to PENDING and clear error
  */
 export async function retryJobAction(jobId: string) {
