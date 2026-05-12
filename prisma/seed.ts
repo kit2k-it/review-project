@@ -66,7 +66,8 @@ async function main() {
   // Seed permissions
   const permissions = [
     // Global permissions (không cần companyId)
-    { code: "companies:manage", name: "Quản lý doanh nghiệp & phân quyền" },
+    { code: "companies:update", name: "Quản lý doanh nghiệp & phân quyền" },
+    { code: "companies:update", name: "Chỉnh sửa thông tin công ty" },
     { code: "qr-codes:manage", name: "Quản lý mã QR" },
     { code: "reviews:manage", name: "Quản lý đánh giá" },
 
@@ -86,7 +87,7 @@ async function main() {
   console.log(`✅ Seeded ${permissions.length} permissions`);
 
   // Grant admin all global permissions
-  const globalPermissionCodes = ["companies:manage", "qr-codes:manage", "reviews:manage"];
+  const globalPermissionCodes = ["companies:update", "qr-codes:manage", "reviews:manage"];
   for (const permCode of globalPermissionCodes) {
     const perm = await prisma.permission.findUnique({ where: { code: permCode } });
     if (perm) {

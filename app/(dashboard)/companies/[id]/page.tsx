@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getSession, canViewCompany, canManageCompany } from "@/lib/auth";
+import { getSession, canViewCompany, canManageCompany, canUpdateCompany } from "@/lib/auth";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import QrCodesManager from "@/components/dashboard/QrCodesManager";
 import CompanyDetailEdit from "./CompanyDetailEdit";
@@ -35,8 +35,11 @@ export default async function CompanyDetailPage({ params }: Props) {
   const canView = await canViewCompany(id);
   if (!canView) notFound();
 
-  // Check if user can manage this company
-  const canManage = await canManageCompany(id);
+  // Check permissions
+  const [canUpdate, canManage] = await Promise.all([
+    canUpdateCompany(id),
+    canManageCompany(id),
+  ]);
 
   const [company, qrCodes, poolResult, assignedUsers] = await Promise.all([
     prisma.company.findUnique({ where: { id } }),
@@ -67,7 +70,7 @@ export default async function CompanyDetailPage({ params }: Props) {
   // Filter and deduplicate users with access (by user.id)
   const usersWithAccessMap = new Map<string, any>();
   (assignedUsers as any[]).forEach((up) => {
-    if (up.permission.code === "companies:read" || up.permission.code === "companies:manage") {
+    if (up.permission.code === "companies:read" || up.permission.code === "companies:update") {
       if (!usersWithAccessMap.has(up.user.id)) {
         usersWithAccessMap.set(up.user.id, up);
       }
@@ -101,7 +104,7 @@ export default async function CompanyDetailPage({ params }: Props) {
         {/* Left: Info + Edit + Access Management */}
         <div className="lg:col-span-1 space-y-6">
           {/* Info + Edit form */}
-          <CompanyDetailEdit company={company} canManage={canManage} />
+          <CompanyDetailEdit company={company} canUpdate={canUpdate} />
 
           {/* Review pool */}
           <Link href={`/companies/${id}/reviews`}>
@@ -188,7 +191,7 @@ export default async function CompanyDetailPage({ params }: Props) {
 
         {/* Right: QR Codes */}
         <div className="lg:col-span-2">
-          <QrCodesManager company={company} qrCodes={qrCodes} pool={pool} canManage={canManage} />
+          <QrCodesManager company={company} qrCodes={qrCodes} pool={pool} canManage={canManage} canUpdate={canUpdate} />
         </div>
       </div>
     </div>

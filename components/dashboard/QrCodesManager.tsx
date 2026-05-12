@@ -25,13 +25,14 @@ interface QrCodeData {
 }
 
 interface Props {
-  company: Company;
+  company: Company & { socialLinks?: { facebook?: string; tiktok?: string } | null };
   qrCodes: QrCodeData[];
   pool?: { available: number; used: number; pendingJob: boolean };
   canManage: boolean;
+  canUpdate: boolean;
 }
 
-export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool, canManage }: Props) {
+export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool, canManage, canUpdate }: Props) {
   const [qrCodes, setQrCodes] = useState<QrCodeData[]>(initialQrCodes);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -103,30 +104,40 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool,
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-text">Liên kết mạng xã hội (chung cho tất cả QR codes)</p>
-            <Button
-              onClick={handleSaveSocialLinks}
-              disabled={savingSocial}
-              size="sm"
-              variant="outline"
-            >
-              {savingSocial ? "Đang lưu..." : "Lưu"}
-            </Button>
+            <p className="text-sm font-medium text-text">Liên kết mạng xã hội</p>
+            {canUpdate && (
+              <Button
+                onClick={handleSaveSocialLinks}
+                disabled={savingSocial}
+                size="sm"
+                variant="outline"
+              >
+                {savingSocial ? "Đang lưu..." : "Lưu"}
+              </Button>
+            )}
           </div>
-          <div className="flex flex-wrap gap-3">
-            <input
-              value={socialLinks.facebook}
-              onChange={(e) => setSocialLinks((s) => ({ ...s, facebook: e.target.value }))}
-              placeholder="Facebook URL"
-              className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <input
-              value={socialLinks.tiktok}
-              onChange={(e) => setSocialLinks((s) => ({ ...s, tiktok: e.target.value }))}
-              placeholder="TikTok URL"
-              className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
+          {canUpdate ? (
+            <div className="flex flex-wrap gap-3">
+              <input
+                value={socialLinks.facebook}
+                onChange={(e) => setSocialLinks((s) => ({ ...s, facebook: e.target.value }))}
+                placeholder="Facebook URL"
+                className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                value={socialLinks.tiktok}
+                onChange={(e) => setSocialLinks((s) => ({ ...s, tiktok: e.target.value }))}
+                placeholder="TikTok URL"
+                className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3 text-sm text-gray-500">
+              {socialLinks.facebook || "Chưa có Facebook"}
+              {socialLinks.tiktok && " | "}
+              {socialLinks.tiktok || "Chưa có TikTok"}
+            </div>
+          )}
         </CardContent>
       </Card>
 

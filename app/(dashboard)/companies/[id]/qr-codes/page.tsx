@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getSession, canViewCompany, canManageCompany } from "@/lib/auth";
+import { getSession, canViewCompany, canManageCompany, canUpdateCompany } from "@/lib/auth";
 import QrCodesManager from "@/components/dashboard/QrCodesManager";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import Link from "next/link";
@@ -25,7 +25,10 @@ export default async function QrCodesPage({ params }: Props) {
   const canView = await canViewCompany(id);
   if (!canView) notFound();
 
-  const canManage = await canManageCompany(id);
+  const [canManage, canUpdate] = await Promise.all([
+    canManageCompany(id),
+    canUpdateCompany(id),
+  ]);
 
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company) notFound();
@@ -54,7 +57,7 @@ export default async function QrCodesPage({ params }: Props) {
         </Link>
       </div>
 
-      <QrCodesManager company={company} qrCodes={qrCodes} pool={poolResult} canManage={canManage} />
+      <QrCodesManager company={company} qrCodes={qrCodes} pool={poolResult} canManage={canManage} canUpdate={canUpdate} />
     </div>
   );
 }

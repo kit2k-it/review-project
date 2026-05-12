@@ -208,8 +208,39 @@ export async function requireEmployee() {
   return session.user;
 }
 
+// Check if user can update/edit a specific company
+// ADMIN: any company | Others: global companies:update OR ownership OR specific company:update permission
+export async function canUpdateCompany(companyId: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session?.user) return false;
+
+  const userId = session.user.id;
+
+  // ADMIN always can update
+  if (session.user.role === "ADMIN") return true;
+
+  // Check if user has GLOBAL update permission
+  if (await hasPermission(userId, "companies:update")) return true;
+
+  // Check if user is owner
+  if (await isCompanyOwner(userId, companyId)) return true;
+
+  // Check if user has specific update permission for this company
+  const specificPerm = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      companyId,
+      permission: {
+        code: "companies:update",
+      },
+    },
+  });
+
+  return !!specificPerm;
+}
+
 // Check if user can manage a specific company
-// ADMIN: any company | Others: global companies:manage OR ownership OR specific company:manage permission
+// ADMIN: any company | Others: global companies:update OR ownership OR specific company:manage permission
 export async function canManageCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
@@ -220,15 +251,10 @@ export async function canManageCompany(companyId: string): Promise<boolean> {
   if (session.user.role === "ADMIN") return true;
 
   // Check if user has GLOBAL manage permission
-  if (await hasPermission(userId, "companies:manage")) return true;
+  if (await hasPermission(userId, "companies:update")) return true;
 
   // Check if user is owner
   if (await isCompanyOwner(userId, companyId)) return true;
-
-  // EMPLOYEE cannot use per-company permissions, only ownership
-  if (session.user.role === "EMPLOYEE") {
-    return false;
-  }
 
   // Check if user has specific manage permission for this company
   const specificPerm = await prisma.userPermission.findFirst({
@@ -236,7 +262,7 @@ export async function canManageCompany(companyId: string): Promise<boolean> {
       userId,
       companyId,
       permission: {
-        code: "companies:manage",
+        code: "companies:update",
       },
     },
   });
@@ -245,7 +271,7 @@ export async function canManageCompany(companyId: string): Promise<boolean> {
 }
 
 // Can VIEW a company (less strict than manage)
-// ADMIN: any company | Others: global companies:read or companies:manage OR ownership OR specific company permission
+// ADMIN: any company | Others: global companies:read or companies:update OR ownership OR specific company permission
 export async function canViewCompany(companyId: string): Promise<boolean> {
   const session = await getSession();
   if (!session?.user) return false;
@@ -257,23 +283,18 @@ export async function canViewCompany(companyId: string): Promise<boolean> {
 
   // Check if user has GLOBAL read or manage permission
   const hasRead = await hasPermission(userId, "companies:read");
-  const hasManage = await hasPermission(userId, "companies:manage");
+  const hasManage = await hasPermission(userId, "companies:update");
   if (hasRead || hasManage) return true;
 
   // Check if user is owner
   if (await isCompanyOwner(userId, companyId)) return true;
 
-  // EMPLOYEE cannot use per-company permissions, only ownership
-  if (session.user.role === "EMPLOYEE") {
-    return false;
-  }
-
-  // Check if user has specific permission for this company (companies:read or companies:manage)
+  // Check if user has specific permission for this company (companies:read or companies:update)
   const specificPerm = await prisma.userPermission.findFirst({
     where: {
       userId,
       companyId,
-      permission: { code: { in: ["companies:read", "companies:manage"] } },
+      permission: { code: { in: ["companies:read", "companies:update"] } },
     },
   });
 
@@ -281,6 +302,7 @@ export async function canViewCompany(companyId: string): Promise<boolean> {
 }
 
 // Export permission helpers for convenience
+// Note: canUpdateCompany, canManageCompany, canViewCompany are already exported via function declarations above
 export { hasPermission, isCompanyOwner, getUserCompanies };
 
 // ==========================================

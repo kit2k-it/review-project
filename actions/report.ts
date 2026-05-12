@@ -42,7 +42,7 @@ async function buildCompanyFilter(userId: string, params?: ReportParams): Promis
 
   // Check global permissions
   const hasCompaniesRead = await hasPermission(userId, "companies:read");
-  const hasCompaniesManage = await hasPermission(userId, "companies:manage");
+  const hasCompaniesManage = await hasPermission(userId, "companies:update");
 
   if (hasCompaniesRead || hasCompaniesManage) {
     // Global permission holders see all companies (or filtered by specific company)
@@ -205,36 +205,36 @@ export async function getReportOverview(params?: ReportParams): Promise<{
     companyFilter.id === null
       ? Promise.resolve(0)
       : prisma.qrCode.count({
-          where: buildCompanyWhereClause(companyFilter),
-        }),
+        where: buildCompanyWhereClause(companyFilter),
+      }),
     // Active QR codes
     companyFilter.id === null
       ? Promise.resolve(0)
       : prisma.qrCode.count({
-          where: {
-            ...buildCompanyWhereClause(companyFilter),
-            isActive: true,
-          },
-        }),
+        where: {
+          ...buildCompanyWhereClause(companyFilter),
+          isActive: true,
+        },
+      }),
     // Review statistics by status
     companyFilter.id === null
       ? Promise.resolve([])
       : prisma.review.groupBy({
-          by: ["status"],
-          where: {
-            ...buildCompanyWhereClause(companyFilter),
-          },
-          _count: { id: true },
-          orderBy: { status: "asc" },
-        }),
+        by: ["status"],
+        where: {
+          ...buildCompanyWhereClause(companyFilter),
+        },
+        _count: { id: true },
+        orderBy: { status: "asc" },
+      }),
     // Pre-generated review stats (only filter by company)
     companyFilter.id === null
       ? Promise.resolve([] as any[])
       : prisma.preGeneratedReview.groupBy({
-          by: ["isUsed"],
-          where: buildCompanyWhereClause(companyFilter),
-          _count: { id: true },
-        }),
+        by: ["isUsed"],
+        where: buildCompanyWhereClause(companyFilter),
+        _count: { id: true },
+      }),
   ]);
 
   // Calculate average rating (only for SUBMITTED reviews)
@@ -242,9 +242,9 @@ export async function getReportOverview(params?: ReportParams): Promise<{
     where: companyFilter.id === null
       ? { status: "SUBMITTED" }
       : {
-          ...buildCompanyWhereClause(companyFilter),
-          status: "SUBMITTED",
-        },
+        ...buildCompanyWhereClause(companyFilter),
+        status: "SUBMITTED",
+      },
     _avg: { rating: true },
   });
 

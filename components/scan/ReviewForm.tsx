@@ -117,11 +117,11 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
         )}
 
         {/* Social links */}
-        {data.socialLinks && (data.socialLinks.facebook || data.socialLinks.tiktok) && (
+        {data.company.socialLinks && (data.company.socialLinks.facebook || data.company.socialLinks.tiktok) && (
           <div className="mt-3 flex items-center justify-center gap-2">
-            {data.socialLinks.facebook && (
+            {data.company.socialLinks.facebook && (
               <a
-                href={data.socialLinks.facebook}
+                href={data.company.socialLinks.facebook}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition-colors"
@@ -132,9 +132,9 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
                 Facebook
               </a>
             )}
-            {data.socialLinks.tiktok && (
+            {data.company.socialLinks.tiktok && (
               <a
-                href={data.socialLinks.tiktok}
+                href={data.company.socialLinks.tiktok}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 rounded-full bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
@@ -218,7 +218,7 @@ export default function ReviewForm({ data, onBack }: ReviewFormProps) {
 
       {/* Footer */}
       <p className="mt-8 text-xs text-gray-400">
-        Powered by QRReview — Mỗi đánh giá chỉ được sử dụng một lần
+        Powered by QRReview
       </p>
     </div>
   );

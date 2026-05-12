@@ -2,10 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { companySchema } from "@/lib/validators";
-import { requireAuth, hasPermission, isCompanyOwner, getUserCompanies } from "@/lib/auth";
+import { requireAuth, canUpdateCompany, canManageCompany, hasPermission, isCompanyOwner, getUserCompanies } from "@/lib/auth";
 import { generateReviewsForCompany } from "./review";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 // ==========================================
 // CREATE COMPANY
@@ -30,9 +29,9 @@ export async function createCompanyAction(
 ) {
   const user = await requireAuth();
 
-  // Check permission: ADMIN, USER, EMPLOYEE, or has global companies:manage
+  // Check permission: ADMIN, USER, EMPLOYEE, or has global companies:update
   const allowedRoles = ["ADMIN", "USER", "EMPLOYEE"];
-  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  const hasGlobalManage = await hasPermission(user.id, "companies:update");
   if (!allowedRoles.includes(user.role) && !hasGlobalManage) {
     return { error: "Không có quyền tạo khách hàng" };
   }
@@ -112,11 +111,9 @@ export async function updateCompanyAction(
 ) {
   const user = await requireAuth();
 
-  // Check if user has global companies:manage permission OR is owner
-  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
-  const isOwner = await isCompanyOwner(user.id, id);
-
-  if (!hasGlobalManage && !isOwner) {
+  // Check if user can update this company (owner OR has companies:update permission globally or per-company)
+  const canUpdate = await canUpdateCompany(id);
+  if (!canUpdate) {
     return { error: "Không có quyền chỉnh sửa" };
   }
 
@@ -173,11 +170,9 @@ export async function updateCompanyAction(
 export async function toggleCompanyActiveAction(id: string) {
   const user = await requireAuth();
 
-  // Check if user has global companies:manage permission OR is owner
-  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
-  const isOwner = await isCompanyOwner(user.id, id);
-
-  if (!hasGlobalManage && !isOwner) {
+  // Check if user can manage this company (owner OR has companies:update permission globally or per-company)
+  const canManage = await canManageCompany(id);
+  if (!canManage) {
     return { error: "Không có quyền thao tác" };
   }
 
@@ -200,11 +195,9 @@ export async function toggleCompanyActiveAction(id: string) {
 export async function deleteCompanyAction(id: string) {
   const user = await requireAuth();
 
-  // Check if user has global companies:manage permission OR is owner
-  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
-  const isOwner = await isCompanyOwner(user.id, id);
-
-  if (!hasGlobalManage && !isOwner) {
+  // Check if user can manage this company (owner OR has companies:update permission globally or per-company)
+  const canManage = await canManageCompany(id);
+  if (!canManage) {
     return { error: "Không có quyền xóa" };
   }
 
@@ -260,8 +253,8 @@ export async function listCompaniesAction(params: {
     const all = await prisma.company.findMany({ select: { id: true } });
     userCompanyIds = all.map(c => c.id);
   } else {
-    // Check if user has global companies:manage permission
-    const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+    // Check if user has global companies:update permission
+    const hasGlobalManage = await hasPermission(user.id, "companies:update");
     if (hasGlobalManage) {
       // Global manage can see all companies
       const all = await prisma.company.findMany({ select: { id: true } });
@@ -319,8 +312,8 @@ export async function updateCompanySocialLinksAction(
 ) {
   const user = await requireAuth();
 
-  // Check permission: global companies:manage OR is owner
-  const hasGlobalManage = await hasPermission(user.id, "companies:manage");
+  // Check permission: global companies:update OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:update");
   const isOwner = await isCompanyOwner(user.id, companyId);
 
   if (!hasGlobalManage && !isOwner) {

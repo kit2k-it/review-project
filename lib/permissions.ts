@@ -57,8 +57,8 @@ export async function isCompanyOwner(userId: string, companyId: string): Promise
 /**
  * Get all companies that a user can access.
  * ADMIN: all companies
- * Global permission holders (companies:read or companies:manage): all companies
- * Others: companies they own + companies they have VIEW permission for (companies:read or companies:manage)
+ * Global permission holders (companies:read or companies:update): all companies
+ * Others: companies they own + companies they have VIEW permission for (companies:read or companies:update)
  *
  * @param userId - User ID
  * @returns Array of companies with id and name
@@ -77,19 +77,10 @@ export async function getUserCompanies(userId: string) {
     });
   }
 
-  // EMPLOYEE role: only see companies they own (no per-company permissions)
-  if (user?.role === "EMPLOYEE") {
-    const ownedCompanies = await prisma.company.findMany({
-      where: { userId },
-      select: { id: true, name: true, isActive: true },
-    });
-    return ownedCompanies.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  // Check if user has global companies:read or companies:manage permission
+  // Check if user has global companies:read or companies:update permission
   const [hasRead, hasManage] = await Promise.all([
     hasPermission(userId, "companies:read"),
-    hasPermission(userId, "companies:manage"),
+    hasPermission(userId, "companies:update"),
   ]);
 
   if (hasRead || hasManage) {
@@ -106,10 +97,10 @@ export async function getUserCompanies(userId: string) {
     select: { id: true, name: true, isActive: true },
   });
 
-  // Get companies user has VIEW permission for (companies:read or companies:manage)
+  // Get companies user has VIEW permission for (companies:read or companies:update)
   // First get permission IDs
   const viewPerms = await prisma.permission.findMany({
-    where: { code: { in: ["companies:read", "companies:manage"] } },
+    where: { code: { in: ["companies:read", "companies:update"] } },
     select: { id: true },
   });
   const viewPermIds = viewPerms.map(p => p.id);

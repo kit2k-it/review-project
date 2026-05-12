@@ -101,8 +101,8 @@ export interface ScanResponse {
     logoUrl?: string | null;
     googleReviewUrl?: string | null;
     hashtags?: string | null;
+    socialLinks?: SocialLinks | null;
   };
-  socialLinks?: SocialLinks | null;
 }
 
 // ============================================

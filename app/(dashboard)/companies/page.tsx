@@ -36,8 +36,8 @@ export default async function CompaniesPage({
     },
   });
 
-  // Check if user can add company (ADMIN, USER, EMPLOYEE, or has companies:manage permission)
-  const canCreateCompany = ["ADMIN", "USER", "EMPLOYEE"].includes(user.role) || await hasPermission(user.id, "companies:manage");
+  // Check if user can add company (ADMIN, USER, EMPLOYEE, or has companies:update permission)
+  const canCreateCompany = ["ADMIN", "USER", "EMPLOYEE"].includes(user.role) || await hasPermission(user.id, "companies:update");
 
   const { companies, pagination } = await listCompaniesAction({
     search,
@@ -83,21 +83,19 @@ export default async function CompaniesPage({
         <nav className="flex gap-4">
           <Link
             href={`/companies?tab=active${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
-            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-              tab === "active"
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === "active"
                 ? "border-primary text-primary"
                 : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
+              }`}
           >
             Đang hoạt động ({activeCount})
           </Link>
           <Link
             href={`/companies?tab=inactive${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
-            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-              tab === "inactive"
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === "inactive"
                 ? "border-primary text-primary"
                 : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
+              }`}
           >
             Đã tắt ({inactiveCount})
           </Link>
@@ -169,9 +167,8 @@ export default async function CompaniesPage({
             <Link
               key={p}
               href={`/companies?page=${p}&q=${search}&category=${category}&tab=${tab}`}
-              className={`rounded-md border px-3 py-1 text-sm ${
-                p === page ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-gray-50"
-              }`}
+              className={`rounded-md border px-3 py-1 text-sm ${p === page ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-gray-50"
+                }`}
             >
               {p}
             </Link>
