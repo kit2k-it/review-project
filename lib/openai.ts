@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getPromptTemplate, replacePromptVariables, PROMPT_NAMES } from "./prompt-templates";
 
 export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -13,19 +14,17 @@ export async function generateReviewTexts(
   category: string,
   count: number = 15
 ): Promise<Array<{ content: string; rating: number }>> {
-  const prompt = `Bạn là chuyên gia viết đánh giá cho doanh nghiệp.
+  const template = await getPromptTemplate(PROMPT_NAMES.REVIEW_GENERATOR);
 
-Viết ${count} đánh giá ngắn, tự nhiên, đa dạng cho "${companyName}" (danh mục: ${category}).
-Mỗi đánh giá 40-80 từ với:
-- Giọng điệu khác nhau (vui vẻ, bình thường, ngạc nhiên, hài lòng)
-- Ưu điểm cụ thể về: chất lượng sản phẩm/dịch vụ, thái độ phục vụ, không gian, giá cả
-- Rating 4-5 sao (có thể có vài review 4 sao với góp ý nhẹ)
-- KHÔNG có tên người cụ thể
+  if (!template) {
+    throw new Error("Review generator prompt template not found");
+  }
 
-Format: JSON array với các object có format:
-{"content": "...", "rating": 5}
-
-Chỉ trả về JSON array, không có gì khác.`;
+  const prompt = replacePromptVariables(template.content, {
+    companyName,
+    category,
+    count,
+  });
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini", // Cheapest capable model
@@ -82,25 +81,19 @@ export async function generateCompanyKeywords(data: {
   phone?: string;
   website?: string;
 }): Promise<{ keywords: string; hashtags: string }> {
-  const prompt = `Phân tích doanh nghiệp sau và trả về từ khóa + hashtags phù hợp cho việc SEO và marketing:
+  const template = await getPromptTemplate(PROMPT_NAMES.HASHTAG_GENERATOR);
 
-Tên: ${data.name}
-Địa chỉ: ${data.address}
-Danh mục: ${data.category}
-Số điện thoại: ${data.phone || "Không có"}
-Website: ${data.website || "Không có"}
+  if (!template) {
+    throw new Error("Hashtag generator prompt template not found");
+  }
 
-Trả về JSON:
-{
-  "keywords": "danh sách từ khóa, phân cách bằng dấu phẩy (tiếng Anh, 8-12 từ khóa chính)",
-  "hashtags": "danh sách hashtags phù hợp, phân cách bằng dấu phẩy (5-8 hashtags)"
-}
-
-Quy tắc:
-- Keywords: từ khóa tiếng Anh phổ biến cho SEO (ví dụ: restaurant, vietnamese food, ho chi minh city, fine dining)
-- Hashtags: hashtags tiếng Anh viết liền không dấu (ví dụ: #vietnamesefood, #hochiminhcity, #localfood)
-- Phù hợp với danh mục: ${data.category}
-- KHÔNG trả về gì ngoài JSON`;
+  const prompt = replacePromptVariables(template.content, {
+    companyName: data.name,
+    address: data.address,
+    category: data.category,
+    phone: data.phone || "Không có",
+    website: data.website || "Không có",
+  });
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
