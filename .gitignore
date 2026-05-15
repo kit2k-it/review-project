@@ -7,7 +7,7 @@ node_modules/
 # Environment variables (contains secrets)
 .env
 .env.local
-.env.*.local
+# .env.*.local
 
 # TypeScript cache
 *.tsbuildinfo
@@ -26,3 +26,8 @@ Thumbs.db
 
 # Misc
 *.pem
+.vercel
+# .env*.local
+
+# Next.js cache
+.next

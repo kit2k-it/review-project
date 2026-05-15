@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { updateCompanyAction } from "@/actions/company";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -11,6 +12,8 @@ interface Company {
   name: string;
   address: string;
   category: string;
+  phone: string | null;
+  keywords: string | null;
   googleMapsUrl: string | null;
   googleReviewUrl: string | null;
   hashtags: string | null;
@@ -26,6 +29,8 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     name: company.name,
     address: company.address,
     category: company.category,
+    phone: company.phone || "",
+    keywords: company.keywords || "",
     googleMapsUrl: company.googleMapsUrl || "",
     googleReviewUrl: company.googleReviewUrl || "",
     hashtags: company.hashtags || "",
@@ -42,13 +47,15 @@ export default function CompanyEditForm({ company }: { company: Company }) {
     setLoading(false);
     if (result?.error) {
       setError(result.error);
+    } else if (result?.success) {
+      window.location.href = "/companies";
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-text">Chỉnh sửa công ty</h1>
+        <h1 className="text-2xl font-bold text-text">Chỉnh sửa khách hàng</h1>
         <p className="text-sm text-gray-500">Cập nhật thông tin {company.name}</p>
       </div>
 
@@ -60,7 +67,7 @@ export default function CompanyEditForm({ company }: { company: Company }) {
             )}
 
             <Input
-              label="Tên công ty"
+              label="Tên khách hàng"
               name="name"
               value={formData.name}
               onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
@@ -119,6 +126,23 @@ export default function CompanyEditForm({ company }: { company: Company }) {
             />
 
             <Input
+              label="Số điện thoại"
+              name="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="VD: 0901234567"
+            />
+
+            <Input
+              label="Từ khoá"
+              name="keywords"
+              value={formData.keywords}
+              onChange={(e) => setFormData((f) => ({ ...f, keywords: e.target.value }))}
+              placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <Input
               label="Hashtags"
               name="hashtags"
               value={formData.hashtags}
@@ -139,12 +163,12 @@ export default function CompanyEditForm({ company }: { company: Company }) {
               <Button type="submit" disabled={loading}>
                 {loading ? "Đang lưu..." : "Lưu thay đổi"}
               </Button>
-              <a
+              <Link
                 href="/companies"
                 className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 Hủy
-              </a>
+              </Link>
             </div>
           </form>
         </CardContent>

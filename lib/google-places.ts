@@ -9,9 +9,11 @@ export interface PlaceResult {
   name: string;
   address: string;
   category: string;
+  phone?: string;
   googleMapsUrl: string;
   googleReviewUrl: string;
   photoUrl?: string;
+  website?: string;
 }
 
 /**
@@ -65,6 +67,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceResult | nu
           "place_id",
           "name",
           "formatted_address",
+          "formatted_phone_number",
           "url",
           "website",
           "types",
@@ -114,9 +117,11 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceResult | nu
       name: place.name || "",
       address: place.formatted_address || "",
       category,
+      phone: place.formatted_phone_number || undefined,
       googleMapsUrl: place.url || "",
-      googleReviewUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+      googleReviewUrl: `https://search.google.com/local/writereview?placeid=${place.place_id}`,
       photoUrl,
+      website: place.website || undefined,
     };
   } catch (error) {
     console.error("Google Places details error:", error);

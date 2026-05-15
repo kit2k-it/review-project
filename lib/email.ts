@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 export async function sendComplaintEmail({
   toEmail,
@@ -15,12 +15,43 @@ export async function sendComplaintEmail({
   content: string;
   rating?: number;
 }) {
-  if (!process.env.RESEND_API_KEY) {
-    console.error("RESEND_API_KEY is not configured");
+  // SMTP Configuration from environment variables
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || "587");
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASSWORD;
+  const smtpSecure = process.env.SMTP_SECURE === "true";
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.error("SMTP configuration incomplete. Missing SMTP_HOST, SMTP_USER, or SMTP_PASSWORD");
     throw new Error("Email service not configured");
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "QRReview <noreply@resend.dev>";
+  // Create transporter
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+    // Optional: for debugging
+    // logger: true,
+    // debug: true,
+  });
+
+  // Verify connection configuration
+  try {
+    await transporter.verify();
+    console.log("✅ SMTP connection verified");
+  } catch (error) {
+    console.error("❌ SMTP connection error:", error);
+    throw new Error("Failed to connect to email server");
+  }
+
+  const fromEmail = process.env.SMTP_FROM || smtpUser;
+  const fromName = process.env.SMTP_FROM_NAME || "QRReview";
 
   const html = `
 <!DOCTYPE html>
@@ -75,17 +106,22 @@ export async function sendComplaintEmail({
 </html>
   `.trim();
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  const { error } = await resend.emails.send({
-    from: fromEmail,
+  const mailOptions = {
+    from: {
+      name: fromName,
+      address: fromEmail,
+    },
     to: toEmail,
     subject: `[Khiếu nại] ${companyName}`,
     html,
-  });
+  };
 
-  if (error) {
-    console.error("Resend error:", error);
-    throw new Error("Failed to send email");
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`📧 Email sent to ${toEmail}:`, info.messageId);
+    return info;
+  } catch (error) {
+    console.error("📧 Email send error:", error);
+    throw error;
   }
 }

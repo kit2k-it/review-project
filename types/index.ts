@@ -7,6 +7,11 @@ export type ReviewStatus = "PENDING" | "SUBMITTED" | "EXPIRED";
 export type JobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 export type JobType = "GENERATE_REVIEWS" | "REGENERATE_REVIEWS";
 
+export interface SocialLinks {
+  facebook?: string;
+  tiktok?: string;
+}
+
 // ============================================
 // COMPANY TYPES
 // ============================================
@@ -21,6 +26,7 @@ export interface Company {
   placeId?: string | null;
   logoUrl?: string | null;
   userId: string;
+  socialLinks?: SocialLinks | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,18 +34,13 @@ export interface Company {
 // ============================================
 // QR CODE TYPES
 // ============================================
-export interface SocialLinks {
-  facebook?: string;
-  tiktok?: string;
-}
-
 export interface QrCode {
   id: string;
   companyId: string;
   code: string;
-  socialLinks?: SocialLinks | null;
   isActive: boolean;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 // ============================================
@@ -100,8 +101,8 @@ export interface ScanResponse {
     logoUrl?: string | null;
     googleReviewUrl?: string | null;
     hashtags?: string | null;
+    socialLinks?: SocialLinks | null;
   };
-  socialLinks?: SocialLinks | null;
 }
 
 // ============================================

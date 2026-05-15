@@ -1,59 +1,111 @@
 import { Metadata } from "next";
 import { listCompaniesAction } from "@/actions/company";
+import { requireAuth, hasPermission, getUserCompanies } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { Building2, Plus, MapPin, QrCode, Star } from "lucide-react";
-import { DeleteCompanyButton } from "./DeleteCompanyButton";
+import { Building2, Plus } from "lucide-react";
+import { CompanyCard } from "./CompanyCard";
 
-export const metadata: Metadata = { title: "Công ty — QRReview" };
+export const metadata: Metadata = { title: "Khách hàng — QRReview" };
 
 export const revalidate = 30;
 
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; page?: string; tab?: string }>;
 }) {
   const params = await searchParams;
   const search = params.q || "";
   const category = params.category || "";
   const page = Number(params.page) || 1;
+  const tab = params.tab === "inactive" ? "inactive" : "active";
+  const user = await requireAuth();
 
-  // Get all categories for filter
+  // Get all categories from companies user can access
+  const userCompanies = await getUserCompanies(user.id);
+  const companyIds = userCompanies.map(c => c.id);
+
   const categories = await prisma.company.findMany({
     select: { category: true },
     distinct: ["category"],
+    where: {
+      id: { in: companyIds },
+    },
   });
+
+  // Check if user can add company (ADMIN, USER, EMPLOYEE, or has companies:update permission)
+  const canCreateCompany = ["ADMIN", "USER", "EMPLOYEE"].includes(user.role) || await hasPermission(user.id, "companies:update");
 
   const { companies, pagination } = await listCompaniesAction({
     search,
     category,
     page,
     pageSize: 20,
+    status: tab === "inactive" ? "inactive" : "active",
   });
+
+  // Check manage permissions for all companies (parallel)
+  const { canManageCompany } = await import("@/lib/auth");
+  const companiesWithPermissions = await Promise.all(
+    companies.map(async (company) => ({
+      ...company,
+      canManage: await canManageCompany(company.id),
+    }))
+  );
+
+  const activeCount = userCompanies.filter(c => c.isActive).length;
+  const inactiveCount = userCompanies.filter(c => !c.isActive).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">Công ty</h1>
-          <p className="text-sm text-gray-500">Quản lý công ty và mã QR</p>
+          <h1 className="text-2xl font-bold text-text">Khách hàng</h1>
+          <p className="text-sm text-gray-500">Quản lý khách hàng và mã QR</p>
         </div>
-        <Link href="/companies/new">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Thêm công ty mới
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          {canCreateCompany && (
+            <Link href="/companies/new">
+              <Button className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" />
+                Thêm khách hàng mới
+              </Button>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-border">
+        <nav className="flex gap-4">
+          <Link
+            href={`/companies?tab=active${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === "active"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+          >
+            Đang hoạt động ({activeCount})
+          </Link>
+          <Link
+            href={`/companies?tab=inactive${search ? `&q=${encodeURIComponent(search)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === "inactive"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+          >
+            Đã tắt ({inactiveCount})
+          </Link>
+        </nav>
       </div>
 
       {/* Filter bar */}
       <Card>
         <CardContent className="p-4">
-          <form className="flex flex-wrap gap-3">
+          <form className="flex flex-col sm:flex-row gap-3">
             <input
               name="q"
               defaultValue={search}
@@ -72,7 +124,8 @@ export default async function CompaniesPage({
                 </option>
               ))}
             </select>
-            <Button type="submit" variant="outline" size="sm">
+            <input type="hidden" name="tab" value={tab} />
+            <Button type="submit" variant="outline" size="sm" className="sm:w-auto">
               Tìm kiếm
             </Button>
           </form>
@@ -84,59 +137,25 @@ export default async function CompaniesPage({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Building2 className="h-12 w-12 text-gray-300 mb-4" />
-            <p className="text-lg font-medium text-gray-400">Chưa có công ty nào</p>
-            <p className="mb-4 text-sm text-gray-400">Bắt đầu bằng cách thêm công ty mới</p>
-            <Link href="/companies/new">
-              <Button size="sm">
-                <Plus className="h-4 w-4" /> Thêm công ty
-              </Button>
-            </Link>
+            <p className="text-lg font-medium text-gray-400">
+              {tab === "active" ? "Chưa có khách hàng nào đang hoạt động" : "Chưa có khách hàng nào bị tắt"}
+            </p>
+            <p className="mb-4 text-sm text-gray-400">
+              {tab === "active" ? "Bắt đầu bằng cách thêm khách hàng mới" : "Các khách hàng bị tắt sẽ hiển thị ở đây"}
+            </p>
+            {canCreateCompany && tab === "active" && (
+              <Link href="/companies/new">
+                <Button size="sm">
+                  <Plus className="h-4 w-4" /> Thêm khách hàng
+                </Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {companies.map((company) => (
-            <Card key={company.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="truncate text-base">{company.name}</CardTitle>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                      <MapPin className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{company.address}</span>
-                    </div>
-                  </div>
-                  <Badge variant="outline">{company.category}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
-                <div className="flex gap-4 text-sm text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <QrCode className="h-3 w-3" />
-                    {company._count.qrCodes} QR
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Star className="h-3 w-3" />
-                    {company._count.reviews} đánh giá
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <Link
-                    href={`/companies/${company.id}/qr-codes`}
-                    className="flex-1 rounded-md border border-border py-2 text-center text-xs font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Mã QR
-                  </Link>
-                  <Link
-                    href={`/companies/${company.id}/edit`}
-                    className="flex-1 rounded-md border border-border py-2 text-center text-xs font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Chỉnh sửa
-                  </Link>
-                  <DeleteCompanyButton id={company.id} />
-                </div>
-              </CardContent>
-            </Card>
+          {companiesWithPermissions.map((company) => (
+            <CompanyCard key={company.id} company={company} canManage={company.canManage} />
           ))}
         </div>
       )}
@@ -147,10 +166,9 @@ export default async function CompaniesPage({
           {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
             <Link
               key={p}
-              href={`/companies?page=${p}&q=${search}&category=${category}`}
-              className={`rounded-md border px-3 py-1 text-sm ${
-                p === page ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-gray-50"
-              }`}
+              href={`/companies?page=${p}&q=${search}&category=${category}&tab=${tab}`}
+              className={`rounded-md border px-3 py-1 text-sm ${p === page ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-gray-50"
+                }`}
             >
               {p}
             </Link>

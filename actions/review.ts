@@ -1,28 +1,26 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { getSession, hasPermission, isCompanyOwner, getUserCompanies, canViewCompany } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 import { reviewSubmitSchema } from "@/lib/validators";
 
 // ==========================================
-// SUBMIT REVIEW (from scan page)
+// SUBMIT REVIEW (from scan page - no auth required)
 // ==========================================
 export async function submitReviewAction(formData: FormData) {
   const raw = {
     reviewId: formData.get("reviewId") as string,
     content: formData.get("content") as string,
     rating: Number(formData.get("rating")),
-    customerName: formData.get("customerName") as string,
-    customerPhone: formData.get("customerPhone") as string,
   };
 
-  const parsed = reviewSubmitSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+  if (!raw.reviewId || !raw.content || !raw.rating) {
+    return { error: "Dữ liệu không hợp lệ" };
   }
 
   const review = await prisma.review.findUnique({
-    where: { id: parsed.data.reviewId },
+    where: { id: raw.reviewId },
   });
 
   if (!review) {
@@ -33,14 +31,39 @@ export async function submitReviewAction(formData: FormData) {
     return { error: "Đánh giá này đã được gửi trước đó" };
   }
 
-  // Update review status
   await prisma.review.update({
-    where: { id: parsed.data.reviewId },
+    where: { id: raw.reviewId },
     data: {
-      content: parsed.data.content,
-      rating: parsed.data.rating,
-      customerName: parsed.data.customerName || null,
-      customerPhone: parsed.data.customerPhone || null,
+      content: raw.content,
+      rating: raw.rating,
+      status: "SUBMITTED",
+      submittedAt: new Date(),
+    },
+  });
+
+  return { success: true };
+}
+
+// ==========================================
+// MARK REVIEW AS DONE (copy URL opened)
+// Called when user clicks "Copy và Gửi" - marks review as submitted
+// ==========================================
+export async function markReviewAsDoneAction(reviewId: string) {
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+  });
+
+  if (!review) {
+    return { error: "Đánh giá không tồn tại" };
+  }
+
+  if (review.status === "SUBMITTED") {
+    return { success: true }; // Already done
+  }
+
+  await prisma.review.update({
+    where: { id: reviewId },
+    data: {
       status: "SUBMITTED",
       submittedAt: new Date(),
     },
@@ -58,13 +81,74 @@ export async function getReviewsAction(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const user = await requireAuth();
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+  const userRole = user.user.role;
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
 
+  // Build company filter based on permissions
+  let companyFilter: any;
+
+  if (userRole === "ADMIN") {
+    companyFilter = {}; // Admin sees all
+  } else {
+    // Check if user has global reviews:manage permission
+    const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+    if (hasGlobalManage) {
+      // Global manage - can see all companies
+      companyFilter = params.companyId ? { companyId: params.companyId } : {};
+    } else {
+      // Get companies user has access to (via companies:read or ownership)
+      const companies = await getUserCompanies(userId);
+      const companyIds = companies.map(c => c.id);
+
+      if (companyIds.length === 0) {
+        return {
+          reviews: [],
+          pagination: { page, pageSize, total: 0, totalPages: 0 },
+        };
+      }
+
+      companyFilter = { companyId: { in: companyIds } };
+    }
+  }
+
+  // Apply specific company filter if provided (and user has access)
+  if (params.companyId) {
+    // Check if user has permission to view reviews for this specific company
+    const hasGlobalReviewsRead = await hasPermission(userId, "reviews:read");
+    const hasGlobalReviewsManage = await hasPermission(userId, "reviews:manage");
+    const isOwner = await isCompanyOwner(userId, params.companyId);
+
+    // Check specific company permission for reviews
+    const reviewPermIds = await prisma.permission.findMany({
+      where: { code: { in: ["reviews:read", "reviews:manage"] } },
+      select: { id: true },
+    });
+    const hasSpecificReviewPerm = reviewPermIds.length > 0 && (
+      await prisma.userPermission.findFirst({
+        where: {
+          userId,
+          companyId: params.companyId,
+          permissionId: { in: reviewPermIds.map(p => p.id) },
+        },
+      })
+    );
+
+    const canView = hasGlobalReviewsRead || hasGlobalReviewsManage || isOwner || !!hasSpecificReviewPerm;
+    if (!canView) {
+      return { error: "Không có quyền xem đánh giá của công ty này" };
+    }
+    companyFilter = { companyId: params.companyId };
+  }
+
   const where = {
-    company: { userId: user.id },
-    ...(params.companyId && { companyId: params.companyId }),
+    ...companyFilter,
     ...(params.status && { status: params.status as "PENDING" | "SUBMITTED" | "EXPIRED" }),
   };
 
@@ -123,15 +207,36 @@ export async function generateReviewsForCompany(companyId: string) {
     },
   });
 
-  // Execute asynchronously (don't await)
-  executeReviewGeneration(job.id).catch((err) => {
-    console.error(`[BackgroundJob] Job ${job.id} failed:`, err);
+  // Execute asynchronously with proper error handling
+  executeReviewGeneration(job.id).catch(async (err) => {
+    console.error(`[BackgroundJob] Job ${job.id} failed before execution:`, err);
+    // Update job status to FAILED if it's still PENDING (didn't get to update itself)
+    try {
+      await prisma.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          errorMsg: `Failed to start: ${String(err)}`,
+          attempts: { increment: 1 },
+        },
+      });
+    } catch (updateErr) {
+      console.error(`[BackgroundJob] Failed to update job status for ${job.id}:`, updateErr);
+    }
   });
 }
 
-async function executeReviewGeneration(jobId: string) {
+export async function executeReviewGeneration(jobId: string) {
   const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "10");
   const BATCH_SIZE = Number(process.env.REVIEW_BATCH_SIZE || "15");
+
+  const job = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
+  if (!job) {
+    console.error(`[BackgroundJob] Job ${jobId} not found`);
+    throw new Error("Job not found");
+  }
+
+  console.log(`[BackgroundJob] Starting job ${jobId} for company ${job.companyId}`);
 
   // Mark job as running
   await prisma.backgroundJob.update({
@@ -139,16 +244,13 @@ async function executeReviewGeneration(jobId: string) {
     data: { status: "RUNNING", startedAt: new Date(), attempts: { increment: 1 } },
   });
 
-  const job = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
-  if (!job) return;
-
   const company = await prisma.company.findUnique({ where: { id: job.companyId } });
   if (!company) {
     await prisma.backgroundJob.update({
       where: { id: jobId },
       data: { status: "FAILED", errorMsg: "Company not found" },
     });
-    return;
+    throw new Error("Company not found");
   }
 
   // Check current pool size
@@ -170,6 +272,7 @@ async function executeReviewGeneration(jobId: string) {
     // Dynamic import to avoid bundling OpenAI in main thread
     const { generateReviewTexts } = await import("@/lib/openai");
 
+    console.log(`[BackgroundJob] ${jobId} generating ${BATCH_SIZE} reviews for ${company.name}...`);
     const reviewTexts = await generateReviewTexts(
       company.name,
       company.category,
@@ -196,6 +299,7 @@ async function executeReviewGeneration(jobId: string) {
 
     console.log(`[BackgroundJob] ${jobId} completed — generated ${reviewTexts.length} reviews`);
   } catch (error) {
+    console.error(`[BackgroundJob] ${jobId} failed:`, error);
     const attempts = job.attempts + 1;
     if (attempts >= job.maxAttempts) {
       await prisma.backgroundJob.update({
@@ -226,7 +330,7 @@ async function executeReviewGeneration(jobId: string) {
 // If pool is low, reset oldest used reviews so they can be reused
 // ==========================================
 export async function checkAndTriggerGeneration(companyId: string) {
-  const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "10");
+  const THRESHOLD = Number(process.env.REVIEW_THRESHOLD || "5");
 
   const [availableCount, pendingJob] = await Promise.all([
     prisma.preGeneratedReview.count({
@@ -242,11 +346,10 @@ export async function checkAndTriggerGeneration(companyId: string) {
   ]);
 
   if (availableCount < THRESHOLD && !pendingJob) {
-    // Reset oldest used reviews so they can be reused
-    await prisma.preGeneratedReview.updateMany({
-      where: { companyId, isUsed: true },
-      data: { isUsed: false, usedAt: null },
-    });
+    // Trigger background generation to refill the pool with new reviews
+    // (no recycling - only create fresh reviews)
+    await generateReviewsForCompany(companyId);
+
     return { triggered: true, availableCount };
   }
 
@@ -261,23 +364,55 @@ export async function getPreGeneratedReviewsAction(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const user = await requireAuth();
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+  const userRole = user.user.role;
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
 
-  // If companyId provided, verify ownership
-  if (params.companyId) {
-    const company = await prisma.company.findUnique({ where: { id: params.companyId } });
-    if (!company || company.userId !== user.id) return { error: "Không có quyền" };
-  }
+  // Build company filter based on permissions
+  let companyFilter: any;
 
-  const where = {
-    ...(params.companyId ? { companyId: params.companyId } : {}),
-  };
+  if (userRole === "ADMIN") {
+    // Admin sees all
+    companyFilter = params.companyId ? { companyId: params.companyId } : {};
+  } else {
+    // Check if user has global reviews:manage permission
+    const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+    if (hasGlobalManage) {
+      // Global manage - can see all
+      companyFilter = params.companyId ? { companyId: params.companyId } : {};
+    } else {
+      // Otherwise, only companies user owns or has companies:read permission for
+      const companies = await getUserCompanies(userId);
+      const companyIds = companies.map(c => c.id);
+
+      if (params.companyId) {
+        // Check if user has access to this specific company
+        const hasAccess = companyIds.includes(params.companyId);
+        if (!hasAccess) {
+          return { error: "Không có quyền truy cập" };
+        }
+        companyFilter = { companyId: params.companyId };
+      } else {
+        if (companyIds.length === 0) {
+          return {
+            reviews: [],
+            pagination: { page, pageSize, total: 0, totalPages: 0 },
+          };
+        }
+        companyFilter = { companyId: { in: companyIds } };
+      }
+    }
+  }
 
   const [reviews, total] = await Promise.all([
     prisma.preGeneratedReview.findMany({
-      where,
+      where: companyFilter,
       include: {
         company: { select: { name: true } },
       },
@@ -285,7 +420,7 @@ export async function getPreGeneratedReviewsAction(params: {
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.preGeneratedReview.count({ where }),
+    prisma.preGeneratedReview.count({ where: companyFilter }),
   ]);
 
   return {
@@ -298,10 +433,15 @@ export async function getPreGeneratedReviewsAction(params: {
 // GET COMPANY REVIEW POOL STATUS
 // ==========================================
 export async function getCompanyReviewPoolAction(companyId: string) {
-  const user = await requireAuth();
+  const session = await getSession();
+  if (!session?.user) return { error: "Chưa đăng nhập" };
 
   const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company || company.userId !== user.id) return { error: "Không có quyền" };
+  if (!company) return { error: "Công ty không tồn tại" };
+
+  // Use canViewCompany for consistent permission checks (includes per-company permissions)
+  const canView = await canViewCompany(companyId);
+  if (!canView) return { error: "Không có quyền" };
 
   const [available, used, pendingJob] = await Promise.all([
     prisma.preGeneratedReview.count({ where: { companyId, isUsed: false } }),
@@ -316,4 +456,180 @@ export async function getCompanyReviewPoolAction(companyId: string) {
   ]);
 
   return { companyId, available, used, pendingJob: !!pendingJob };
+}
+
+// ==========================================
+// CREATE PRE-GENERATED REVIEW MANUALLY
+// ==========================================
+export async function createPreGeneratedReviewAction(data: {
+  companyId: string;
+  content: string;
+  rating: number;
+}) {
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+
+  const company = await prisma.company.findUnique({ where: { id: data.companyId } });
+  if (!company) return { error: "Không tìm thấy công ty" };
+
+  // Check permission: global reviews:manage OR owner of company
+  const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+  const isOwner = await isCompanyOwner(userId, data.companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền tạo đánh giá" };
+  }
+
+  if (!data.content || data.content.trim().length < 10) {
+    return { error: "Nội dung đánh giá phải có ít nhất 10 ký tự" };
+  }
+
+  if (data.rating < 1 || data.rating > 5) {
+    return { error: "Số sao phải từ 1 đến 5" };
+  }
+
+  const review = await prisma.preGeneratedReview.create({
+    data: {
+      companyId: data.companyId,
+      content: data.content.trim(),
+      rating: data.rating,
+      isManuallyCreated: true,
+      isActive: true,
+    },
+  });
+
+  revalidatePath(`/companies/${data.companyId}/reviews`);
+
+  return { success: true, review };
+}
+
+// ==========================================
+// UPDATE PRE-GENERATED REVIEW
+// ==========================================
+export async function updatePreGeneratedReviewAction(data: {
+  reviewId: string;
+  content: string;
+  rating: number;
+}) {
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: data.reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  // Check permission: global reviews:manage OR owner of company
+  const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+  const isOwner = review.company.userId === userId;
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền chỉnh sửa đánh giá này" };
+  }
+
+  if (!data.content || data.content.trim().length < 10) {
+    return { error: "Nội dung đánh giá phải có ít nhất 10 ký tự" };
+  }
+
+  if (data.rating < 1 || data.rating > 5) {
+    return { error: "Số sao phải từ 1 đến 5" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: data.reviewId },
+    data: {
+      content: data.content.trim(),
+      rating: data.rating,
+    },
+  });
+
+  return { success: true, review: updated };
+}
+
+// ==========================================
+// DEACTIVATE / ACTIVATE PRE-GENERATED REVIEW
+// ==========================================
+export async function togglePreGeneratedReviewActiveAction(reviewId: string) {
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  // Check permission: global reviews:manage OR owner of company
+  const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+  const isOwner = review.company.userId === userId;
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền thao tác với đánh giá này" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: reviewId },
+    data: { isActive: !review.isActive },
+  });
+
+  return { success: true, review: updated };
+}
+
+// ==========================================
+// RESET USED REVIEW (make it available again)
+// ==========================================
+export async function resetUsedReviewAction(reviewId: string) {
+  const user = await getSession();
+  if (!user?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  const userId = user.user.id;
+
+  const review = await prisma.preGeneratedReview.findUnique({
+    where: { id: reviewId },
+    include: { company: { select: { userId: true } } },
+  });
+
+  if (!review) {
+    return { error: "Không tìm thấy đánh giá" };
+  }
+
+  // Check permission: global reviews:manage OR owner of company
+  const hasGlobalManage = await hasPermission(userId, "reviews:manage");
+  const isOwner = review.company.userId === userId;
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền thao tác với đánh giá này" };
+  }
+
+  if (!review.isUsed) {
+    return { error: "Đánh giá này chưa được sử dụng" };
+  }
+
+  const updated = await prisma.preGeneratedReview.update({
+    where: { id: reviewId },
+    data: { isUsed: false, usedAt: null },
+  });
+
+  return { success: true, review: updated };
 }

@@ -39,6 +39,7 @@ export async function GET(
           logoUrl: true,
           hashtags: true,
           complaintEmail: true,
+          socialLinks: true,
         },
       },
     },
@@ -55,15 +56,28 @@ export async function GET(
     );
   }
 
+  // Check expiration
+  if (qrCode.expiresAt && new Date() > qrCode.expiresAt) {
+    return NextResponse.json(
+      { error: "Mã QR đã hết hạn sử dụng" },
+      { status: 410 }
+    );
+  }
+
   const company = qrCode.company;
 
-  // Strategy 1: Try to get a pre-generated review
+  // Strategy 1: Try to get an unused + active pre-generated review
+  // Prioritize manual reviews first (isManuallyCreated = true), then AI-generated
   const preGenReview = await prisma.preGeneratedReview.findFirst({
     where: {
       companyId: company.id,
       isUsed: false,
+      isActive: true,
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [
+      { isManuallyCreated: "desc" }, // Manual reviews first
+      { createdAt: "asc" }, // Then FIFO within each type
+    ],
   });
 
   let reviewContent: string;
@@ -73,7 +87,8 @@ export async function GET(
   if (preGenReview) {
     reviewContent = preGenReview.content;
     rating = preGenReview.rating;
-    isAiGenerated = false;
+    // Manually created reviews are NOT marked as AI-generated
+    isAiGenerated = !preGenReview.isManuallyCreated;
 
     // Mark as used
     await prisma.preGeneratedReview.update({
@@ -115,10 +130,12 @@ export async function GET(
   // Return the review + metadata needed for the form
   return NextResponse.json({
     reviewId: review.id,
+    qrCodeId: qrCode.id,
     content: reviewContent,
     rating,
     isAiGenerated,
     company: {
+      id: company.id,
       name: company.name,
       address: company.address,
       category: company.category,
@@ -126,7 +143,7 @@ export async function GET(
       googleReviewUrl: company.googleReviewUrl,
       hashtags: company.hashtags,
       complaintEmail: company.complaintEmail,
+      socialLinks: company.socialLinks,
     },
-    socialLinks: qrCode.socialLinks,
   });
 }

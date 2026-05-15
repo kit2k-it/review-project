@@ -1,7 +1,7 @@
 import { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, canUpdateCompany } from "@/lib/auth";
 import CompanyEditForm from "./CompanyEditForm";
 
 type Props = { params: Promise<{ id: string }> };
@@ -16,8 +16,14 @@ export default async function EditCompanyPage({ params }: Props) {
   const { id } = await params;
   const user = await requireAuth();
 
+  // Check if user can update this company (owner OR has companies:update permission)
+  const canUpdate = await canUpdateCompany(id);
+  if (!canUpdate) {
+    redirect(`/companies/${id}?error=Bạn không có quyền chỉnh sửa thông tin công ty này`);
+  }
+
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company || company.userId !== user.id) notFound();
+  if (!company) notFound();
 
   return <CompanyEditForm company={company} />;
 }

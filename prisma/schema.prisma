@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -14,21 +13,28 @@ datasource db {
 // ============================================
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String
-  role          Role      @default(USER)
-  companies     Company[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String
+  name            String
+  role            Role             @default(USER)
+  createdById     String?
+  createdBy       User?            @relation("UserCreator", fields: [createdById], references: [id])
+  creators        User[]           @relation("UserCreator")
+  companies       Company[]        @relation("CompanyOwner")
+  userPermissions UserPermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([email])
+  @@index([createdById])
 }
 
 enum Role {
   ADMIN
   USER
+  CLIENT
+  EMPLOYEE
 }
 
 // ============================================
@@ -36,42 +42,78 @@ enum Role {
 // ============================================
 
 model Company {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name            String
-  address         String
-  category        String
-  googleMapsUrl   String?
-  googleReviewUrl String?
-  hashtags        String?   // Stored as comma-separated: "restaurant,ha noi,an uong"
-  placeId         String?   // Google Places ID for dedup
-  logoUrl         String?   // Cloudinary URL
-  complaintEmail  String?   // Email nhận khiếu nại từ khách hàng
+  id                  String               @id @default(cuid())
+  userId              String
+  user                User                 @relation("CompanyOwner", fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  address             String
+  category            String
+  phone               String? // Số điện thoại liên hệ
+  keywords            String? // Từ khoá, phân cách bằng dấu phẩy: "restaurant,ha noi,an uong"
+  googleMapsUrl       String?
+  googleReviewUrl     String?
+  hashtags            String? // Alias cho keywords (backward compatibility)
+  placeId             String? // Google Places ID for dedup
+  logoUrl             String? // Cloudinary URL
+  complaintEmail      String? // Email nhận khiếu nại từ khách hàng
+  socialLinks         Json? // { facebook?: string, tiktok?: string } - Links to company's social media
+  isActive            Boolean              @default(true) // false = đã huỷ, không hiển thị
   qrCodes             QrCode[]
   reviews             Review[]
   preGeneratedReviews PreGeneratedReview[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  customerContacts    CustomerContact[]
+  userPermissions     UserPermission[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([userId])
   @@index([name])
   @@index([category])
 }
 
+// ============================================
+// PERMISSION SYSTEM
+// ============================================
+
+model Permission {
+  id              String           @id @default(cuid())
+  code            String           @unique // "company:read", "company:create", "company:update", "company:delete", "qr:create", "qr:delete", "qr:toggle", "review:read", "review:pregen:create", "review:pregen:update", "review:pregen:toggle"
+  name            String // mô tả tiếng Việt
+  userPermissions UserPermission[]
+}
+
+model UserPermission {
+  id           String  @id @default(cuid())
+  userId       String
+  permissionId String
+  companyId    String? // null = global permission (company:create), có value = per-company permission
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  company    Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId, companyId])
+  @@index([userId])
+  @@index([permissionId])
+  @@index([companyId])
+}
+
 model QrCode {
-  id          String    @id @default(cuid())
-  companyId   String
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code        String    @unique  // Short unique code: "ABC123XY"
-  socialLinks Json?     // Stored as: { facebook?: string, tiktok?: string }
-  isActive    Boolean   @default(true)
-  reviews     Review[]
-  createdAt   DateTime  @default(now())
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code            String   @unique // Short unique code: "ABC123XY"
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime? // Null = never expires, otherwise expires at this time
+  reviews         Review[]
+  customerContacts CustomerContact[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([companyId])
   @@index([code])
   @@index([isActive])
+  @@index([expiresAt])
 }
 
 // ============================================
@@ -80,20 +122,21 @@ model QrCode {
 
 // Reviews created from QR scans
 model Review {
-  id           String        @id @default(cuid())
-  qrCodeId     String
-  qrCode       QrCode        @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
-  companyId    String        // Denormalized for faster queries
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  content      String
-  rating       Int           // 1-5
-  customerName String?
-  customerPhone String?
-  status       ReviewStatus @default(PENDING)
-  isAiGenerated Boolean     @default(false)
-  usedAt       DateTime?
-  submittedAt  DateTime?
-  createdAt    DateTime      @default(now())
+  id              String       @id @default(cuid())
+  qrCodeId        String
+  qrCode          QrCode       @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
+  companyId       String // Denormalized for faster queries
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content         String
+  rating          Int // 1-5
+  customerName    String?
+  customerPhone   String?
+  status          ReviewStatus @default(PENDING)
+  isAiGenerated   Boolean      @default(false)
+  usedAt          DateTime?
+  submittedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  customerContacts CustomerContact[]
 
   @@index([companyId])
   @@index([qrCodeId])
@@ -102,26 +145,31 @@ model Review {
 }
 
 enum ReviewStatus {
-  PENDING    // Reserved but not yet submitted
-  SUBMITTED  // User completed the form
-  EXPIRED    // Left unused for too long (optional)
+  PENDING // Reserved but not yet submitted
+  SUBMITTED // User completed the form
+  EXPIRED // Left unused for too long (optional)
 }
 
 // Pre-generated AI reviews for fast QR scanning
 // These are "drafts" that get claimed on scan
 model PreGeneratedReview {
-  id          String   @id @default(cuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  content     String
-  rating      Int      // 1-5
-  isUsed      Boolean  @default(false)
-  usedAt      DateTime?
-  createdAt   DateTime @default(now())
+  id                String    @id @default(cuid())
+  companyId         String
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content           String
+  rating            Int // 1-5
+  isUsed            Boolean   @default(false)
+  isManuallyCreated Boolean   @default(false) // true = tạo thủ công, false = tạo bằng AI
+  isActive          Boolean   @default(true) // false = bị vô hiệu hóa, không dùng được
+  usedAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
   @@index([companyId])
   @@index([isUsed])
-  @@index([companyId, isUsed]) // Composite index for fast "find one unused"
+  @@index([isActive])
+  @@index([companyId, isUsed, isActive]) // Composite index for fast "find one unused"
+  @@index([companyId, createdAt]) // For FIFO ordering
 }
 
 // ============================================
@@ -131,35 +179,59 @@ model PreGeneratedReview {
 // Tracks pending/active background review generation jobs
 // Prevents duplicate concurrent jobs for the same company
 model BackgroundJob {
-  id         String        @id @default(cuid())
-  companyId  String
-  jobType    JobType       @default(GENERATE_REVIEWS)
-  status     JobStatus     @default(PENDING)
-  attempts   Int           @default(0)
-  maxAttempts Int          @default(3)
-  errorMsg   String?
-  result     Json?         // { generatedCount: 15 }
-  startedAt  DateTime?
+  id          String    @id @default(cuid())
+  companyId   String
+  jobType     JobType   @default(GENERATE_REVIEWS)
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  errorMsg    String?
+  result      Json? // { generatedCount: 15 }
+  startedAt   DateTime?
   completedAt DateTime?
-  createdAt  DateTime      @default(now())
-  expiresAt  DateTime?    // Auto-cleanup after 24h
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime? // Auto-cleanup after 24h
 
   @@index([companyId])
   @@index([status])
   @@index([jobType, status]) // Find pending jobs quickly
 }
 
+// Customer contacts collected after review submission (for promotions)
+model CustomerContact {
+  id                String    @id @default(cuid())
+  reviewId          String?   // Optional link to the review submitted
+  qrCodeId          String?   // Optional link to QR code scanned
+  companyId         String    // Company that received this contact
+  customerName      String
+  customerPhone     String?
+  customerEmail     String?
+  promoCodeOffered  String?   // Promo code provided to customer
+  source            String    @default("review_thankyou") // How this contact was collected
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  review            Review?   @relation(fields: [reviewId], references: [id])
+  qrCode            QrCode?   @relation(fields: [qrCodeId], references: [id])
+  company           Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([customerEmail])
+  @@index([customerPhone])
+  @@index([createdAt])
+}
+
 enum JobType {
-  GENERATE_REVIEWS  // Generate AI reviews
+  GENERATE_REVIEWS // Generate AI reviews
   REGENERATE_REVIEWS // Regenerate exhausted pool
 }
 
 enum JobStatus {
-  PENDING     // Job queued, not started
-  RUNNING     // Currently being processed
-  COMPLETED   // Successfully finished
-  FAILED      // Failed after all attempts
-  CANCELLED   // Manually cancelled
+  PENDING // Job queued, not started
+  RUNNING // Currently being processed
+  COMPLETED // Successfully finished
+  FAILED // Failed after all attempts
+  CANCELLED // Manually cancelled
 }
 
 // ============================================
@@ -168,11 +240,11 @@ enum JobStatus {
 
 // Lightweight: store only what we need
 model ServiceAccount {
-  id        String   @id @default(cuid())
-  name      String   @unique  // "background-worker", "api-gateway"
-  secret    String   // Hashed API key
-  role      String   // "SYSTEM_WORKER"
-  isActive  Boolean  @default(true)
+  id         String    @id @default(cuid())
+  name       String    @unique // "background-worker", "api-gateway"
+  secret     String // Hashed API key
+  role       String // "SYSTEM_WORKER"
+  isActive   Boolean   @default(true)
   lastUsedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }

@@ -264,9 +264,9 @@ review-ai/
 
 | Action | Type | Purpose |
 |--------|------|---------|
-| `createCompany(data)` | Server Action | Tạo công ty mới |
-| `updateCompany(id, data)` | Server Action | Cập nhật công ty |
-| `deleteCompany(id)` | Server Action | Xóa công ty |
+| `createCompany(data)` | Server Action | Tạo khách hàng mới |
+| `updateCompany(id, data)` | Server Action | Cập nhật khách hàng |
+| `deleteCompany(id)` | Server Action | Xóa khách hàng |
 | `createQrCode(companyId)` | Server Action | Tạo mã QR |
 | `deleteQrCode(id)` | Server Action | Xóa mã QR |
 | `submitReview(data)` | Server Action | Gửi đánh giá |
@@ -461,7 +461,7 @@ CLOUDINARY_API_SECRET=...
 - Search/filter bar (name, address, category)
 - Sortable table with columns: Name, Address, Category, QR Codes, Reviews, Actions
 - Pagination (20 items/page)
-- Empty state: "Chưa có công ty nào"
+- Empty state: "Chưa có khách hàng nào"
 
 **Company Form**
 - Google Places autocomplete input
@@ -514,7 +514,7 @@ All UI elements use Vietnamese:
 
 ```
 Đăng nhập / Đăng ký / Đăng xuất
-Quản lý công ty / Thêm công ty mới / Chỉnh sửa
+Quản lý khách hàng / Thêm khách hàng mới / Chỉnh sửa
 Mã QR / Tạo mã QR / Tải xuống
 Đánh giá / Xem đánh giá / Gửi đánh giá
 Tìm kiếm / Lọc / Sắp xếp

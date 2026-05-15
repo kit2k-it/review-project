@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createCompanyAction } from "@/actions/company";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -35,11 +36,15 @@ export default function NewCompanyPage() {
     name: "",
     address: "",
     category: "",
+    phone: "",
+    keywords: "",
     googleMapsUrl: "",
     googleReviewUrl: "",
     hashtags: "",
     placeId: "",
     complaintEmail: "",
+    facebook: "",
+    tiktok: "",
   });
 
   async function handleSearch() {
@@ -49,7 +54,7 @@ export default function NewCompanyPage() {
     setError(null);
     setSelectedPlace(null);
     setPredictions([]);
-    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "", complaintEmail: "" }));
+    setFormData((f) => ({ ...f, name: "", address: "", category: "", googleMapsUrl: "", googleReviewUrl: "", placeId: "", complaintEmail: "", facebook: "", tiktok: "" }));
 
     try {
       const res = await fetch(`/api/places?q=${encodeURIComponent(query.trim())}`);
@@ -79,11 +84,15 @@ export default function NewCompanyPage() {
           name: details.name,
           address: details.address,
           category: details.category,
+          phone: details.phone || "",
+          keywords: details.keywords || "",
           googleMapsUrl: details.googleMapsUrl,
           googleReviewUrl: details.googleReviewUrl,
-          hashtags: "",
+          hashtags: details.hashtags || "",
           placeId: details.placeId,
           complaintEmail: "",
+          facebook: "",
+          tiktok: "",
         });
         setPredictions([]);
         setQuery("");
@@ -106,13 +115,15 @@ export default function NewCompanyPage() {
     setPending(false);
     if (result?.error) {
       setError(result.error);
+    } else if (result?.success) {
+      window.location.href = "/companies";
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-text">Thêm công ty mới</h1>
+        <h1 className="text-2xl font-bold text-text">Thêm khách hàng mới</h1>
         <p className="text-sm text-gray-500">Tìm kiếm trên Google Maps hoặc nhập thủ công</p>
       </div>
 
@@ -212,7 +223,7 @@ export default function NewCompanyPage() {
             )}
 
             <Input
-              label="Tên công ty"
+              label="Tên khách hàng"
               value={formData.name}
               onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
               placeholder="VD: Nhà hàng ABC"
@@ -272,6 +283,21 @@ export default function NewCompanyPage() {
             />
 
             <Input
+              label="Số điện thoại"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="VD: 0901234567"
+            />
+
+            <Input
+              label="Từ khoá"
+              value={formData.keywords}
+              onChange={(e) => setFormData((f) => ({ ...f, keywords: e.target.value }))}
+              placeholder="VD: restaurant, ha noi, food"
+            />
+
+            <Input
               label="Hashtags"
               value={formData.hashtags}
               onChange={(e) => setFormData((f) => ({ ...f, hashtags: e.target.value }))}
@@ -286,13 +312,48 @@ export default function NewCompanyPage() {
               placeholder="complaints@example.com"
             />
 
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-text">
+                  Facebook URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.facebook}
+                  onChange={(e) => setFormData((f) => ({ ...f, facebook: e.target.value }))}
+                  placeholder="https://facebook.com/..."
+                  className="mt-1 flex h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-text">
+                  TikTok URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.tiktok}
+                  onChange={(e) => setFormData((f) => ({ ...f, tiktok: e.target.value }))}
+                  placeholder="https://tiktok.com/@..."
+                  className="mt-1 flex h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Những liên kết này sẽ hiển thị trên tất cả mã QR của cửa hàng
+            </p>
+
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={pending}>
-                {pending ? "Đang lưu..." : "Lưu công ty"}
+                {pending ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Đang lưu...
+                  </>
+                ) : "Lưu khách hàng"}
               </Button>
-              <a href="/companies" className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
+              <Link href="/companies" className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
                 Hủy
-              </a>
+              </Link>
             </div>
           </form>
         </CardContent>

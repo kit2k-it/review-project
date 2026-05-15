@@ -7,18 +7,54 @@ import {
   Building2,
   QrCode,
   Star,
-  Settings,
   LogOut,
   Scan,
+  Users,
+  UserRound,
+  User,
+  BarChart3,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/companies", label: "Công ty", icon: Building2 },
-  { href: "/reviews", label: "Đánh giá", icon: Star },
-  { href: "/settings", label: "Cài đặt", icon: Settings },
-];
+const navItemsByRole: Record<string, { href: string; label: string; icon: React.ElementType }[]> = {
+  ADMIN: [
+    { href: "/", label: "Tổng quan", icon: LayoutDashboard },
+    { href: "/companies", label: "Khách hàng", icon: Building2 },
+    { href: "/reviews", label: "Đánh giá", icon: Star },
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
+    { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
+    { href: "/admin/background-jobs", label: "Background Jobs", icon: Activity },
+  ],
+  CLIENT: [
+    // Không hiển thị "Tổng quan" cho CLIENT
+    { href: "/companies", label: "Cửa hàng của tôi", icon: Building2 },
+    { href: "/reviews", label: "Đánh giá", icon: Star },
+  ],
+  EMPLOYEE: [
+    { href: "/", label: "Tổng quan", icon: LayoutDashboard },
+    { href: "/employee/companies", label: "Khách hàng", icon: Building2 },
+    { href: "/reviews", label: "Đánh giá", icon: Star },
+    { href: "/employee/users", label: "Tài khoản", icon: Users },
+    { href: "/employee/reports", label: "Báo cáo", icon: BarChart3 },
+  ],
+  USER: [
+    { href: "/", label: "Tổng quan", icon: LayoutDashboard },
+    { href: "/companies", label: "Khách hàng", icon: Building2 },
+    { href: "/reviews", label: "Đánh giá", icon: Star },
+  ],
+};
+
+// All roles see "Hồ sơ" at the bottom
+const profileNavItem = { href: "/profile", label: "Hồ sơ", icon: User } as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Quản trị viên",
+  CLIENT: "Khách hàng",
+  EMPLOYEE: "Nhân viên",
+  USER: "Người dùng",
+};
 
 interface SidebarProps {
   user: { name: string; email: string; role: string };
@@ -26,6 +62,7 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const navItems = navItemsByRole[user.role] || navItemsByRole["USER"];
 
   async function handleLogout() {
     const { logoutAction } = await import("@/lib/auth");
@@ -33,7 +70,7 @@ export function Sidebar({ user }: SidebarProps) {
   }
 
   return (
-    <aside className="flex w-64 flex-col border-r border-border bg-surface">
+    <aside className="flex h-full w-64 flex-col border-r border-border bg-surface">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b border-border px-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
@@ -67,6 +104,22 @@ export function Sidebar({ user }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Profile link */}
+      <div className="border-t border-border px-3 py-2">
+        <Link
+          href={profileNavItem.href}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            pathname === profileNavItem.href
+              ? "bg-primary/10 text-primary"
+              : "text-gray-500 hover:bg-gray-100 hover:text-text"
+          )}
+        >
+          <profileNavItem.icon className="h-4 w-4" />
+          {profileNavItem.label}
+        </Link>
+      </div>
 
       {/* User section */}
       <div className="border-t border-border p-4">

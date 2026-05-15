@@ -1,51 +1,73 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createQrCodeAction, deleteQrCodeAction, toggleQrCodeAction } from "@/actions/qr-code";
+import { useState, useEffect, useRef } from "react";
+import { createQrCodeAction, deleteQrCodeAction, toggleQrCodeAction, updateQrCodeExpiryAction } from "@/actions/qr-code";
+import { updateCompanySocialLinksAction } from "@/actions/company";
 import { getCompanyReviewPoolAction } from "@/actions/review";
 import { generateQrDataUrl } from "@/lib/qr";
+import QRCode from "qrcode";
+import { toPng, toCanvas } from "html-to-image";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { QrCode, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check } from "lucide-react";
+import { QrCode as QrCodeIcon, Plus, Download, Trash2, ToggleLeft, ToggleRight, Star, Copy, Check, Calendar } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { useCallback } from "react";
+import type { Company } from "@prisma/client";
 
 interface QrCodeData {
   id: string;
   code: string;
   isActive: boolean;
-  socialLinks: any;
   _count: { reviews: number };
+  expiresAt?: Date | null;
 }
 
 interface Props {
-  company: { id: string; name: string };
+  company: Company & { socialLinks?: { facebook?: string; tiktok?: string } | null };
   qrCodes: QrCodeData[];
   pool?: { available: number; used: number; pendingJob: boolean };
+  canManage: boolean;
+  canUpdate: boolean;
 }
 
-export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool }: Props) {
+export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool, canManage, canUpdate }: Props) {
   const [qrCodes, setQrCodes] = useState<QrCodeData[]>(initialQrCodes);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [socialLinks, setSocialLinks] = useState({ facebook: "", tiktok: "" });
+  const [socialLinks, setSocialLinks] = useState<{ facebook: string; tiktok: string }>({
+    facebook: (company.socialLinks as any)?.facebook || "",
+    tiktok: (company.socialLinks as any)?.tiktok || "",
+  });
+  const [savingSocial, setSavingSocial] = useState(false);
 
   async function handleCreate() {
     setCreating(true);
-    const links: { facebook?: string; tiktok?: string } = {};
-    if (socialLinks.facebook) links.facebook = socialLinks.facebook;
-    if (socialLinks.tiktok) links.tiktok = socialLinks.tiktok;
-    const result = await createQrCodeAction(
-      company.id,
-      Object.keys(links).length > 0 ? links : undefined
-    );
-    setCreating(false);
-    if (result.success && result.qrCode) {
-      setQrCodes((prev) => [
-        { ...result.qrCode!, _count: { reviews: 0 }, socialLinks: result.qrCode!.socialLinks },
-        ...prev,
-      ]);
+    try {
+      const result = await createQrCodeAction(company.id);
+      setCreating(false);
+      if (result.success && result.qrCode) {
+        setQrCodes((prev) => [
+          { ...result.qrCode!, _count: { reviews: 0 } },
+          ...prev,
+        ]);
+      }
+    } catch (error) {
+      setCreating(false);
+      console.error("Failed to create QR code:", error);
+    }
+  }
+
+  async function handleSaveSocialLinks() {
+    setSavingSocial(true);
+    try {
+      const result = await updateCompanySocialLinksAction(company.id, socialLinks);
+      if (result && "error" in result) {
+        alert((result as { error: string }).error);
+      }
+    } finally {
+      setSavingSocial(false);
     }
   }
 
@@ -68,35 +90,54 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">Mã QR — {company.name}</h1>
-          <p className="text-sm text-gray-500">Tạo và quản lý mã QR cho công ty</p>
+          <h2 className="text-xl font-bold text-text">Mã QR</h2>
+          <p className="text-sm text-gray-500">Tạo và quản lý mã QR</p>
         </div>
-        <Button onClick={handleCreate} disabled={creating}>
+        <Button onClick={handleCreate} disabled={creating || !canManage} className="w-full sm:w-auto" title={!canManage ? "Bạn không có quyền tạo mã QR" : undefined}>
           <Plus className="h-4 w-4" />
           {creating ? "Đang tạo..." : "Tạo mã QR mới"}
         </Button>
       </div>
 
-      {/* Social links */}
       <Card>
         <CardContent className="p-4">
-          <p className="mb-2 text-sm font-medium text-text">Liên kết mạng xã hội (tùy chọn)</p>
-          <div className="flex flex-wrap gap-3">
-            <input
-              value={socialLinks.facebook}
-              onChange={(e) => setSocialLinks((s) => ({ ...s, facebook: e.target.value }))}
-              placeholder="Facebook URL"
-              className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <input
-              value={socialLinks.tiktok}
-              onChange={(e) => setSocialLinks((s) => ({ ...s, tiktok: e.target.value }))}
-              placeholder="TikTok URL"
-              className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-text">Liên kết mạng xã hội</p>
+            {canUpdate && (
+              <Button
+                onClick={handleSaveSocialLinks}
+                disabled={savingSocial}
+                size="sm"
+                variant="outline"
+              >
+                {savingSocial ? "Đang lưu..." : "Lưu"}
+              </Button>
+            )}
           </div>
+          {canUpdate ? (
+            <div className="flex flex-wrap gap-3">
+              <input
+                value={socialLinks.facebook}
+                onChange={(e) => setSocialLinks((s) => ({ ...s, facebook: e.target.value }))}
+                placeholder="Facebook URL"
+                className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                value={socialLinks.tiktok}
+                onChange={(e) => setSocialLinks((s) => ({ ...s, tiktok: e.target.value }))}
+                placeholder="TikTok URL"
+                className="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3 text-sm text-gray-500">
+              {socialLinks.facebook || "Chưa có Facebook"}
+              {socialLinks.tiktok && " | "}
+              {socialLinks.tiktok || "Chưa có TikTok"}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -119,19 +160,21 @@ export default function QrCodesManager({ company, qrCodes: initialQrCodes, pool 
       {qrCodes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <QrCode className="h-12 w-12 text-gray-300 mb-4" />
+            <QrCodeIcon className="h-12 w-12 text-gray-300 mb-4" />
             <p className="text-lg font-medium text-gray-400">Chưa có mã QR nào</p>
             <p className="text-sm text-gray-400">Tạo mã QR đầu tiên để bắt đầu</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {qrCodes.map((qr) => (
             <QrCodeCard
               key={qr.id}
               qr={qr}
               onDelete={handleDelete}
               onToggle={handleToggle}
+              canManage={canManage}
+              socialLinks={company.socialLinks as any}
             />
           ))}
         </div>
@@ -144,27 +187,212 @@ function QrCodeCard({
   qr,
   onDelete,
   onToggle,
+  canManage,
+  socialLinks,
 }: {
   qr: QrCodeData;
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
+  canManage: boolean;
+  socialLinks?: { facebook?: string; tiktok?: string } | null;
 }) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBgSize, setPreviewBgSize] = useState<{width: number, height: number} | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [editingExpiry, setEditingExpiry] = useState(false);
+  const [expiryValue, setExpiryValue] = useState<string>("");
+  const [expiryLoading, setExpiryLoading] = useState(false);
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
   const scanUrl = `${baseUrl}/scan/${qr.code}`;
+
+  // Calculate expiration status
+  const expiresAt = qr.expiresAt ? new Date(qr.expiresAt) : null;
+  const now = new Date();
+  const isExpired = expiresAt ? now > expiresAt : false;
+  const daysRemaining = expiresAt
+    ? Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  // Format date for datetime-local input
+  const formatDateTimeLocal = (date: Date | null) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const handleStartEditExpiry = () => {
+    setExpiryValue(formatDateTimeLocal(expiresAt));
+    setEditingExpiry(true);
+  };
+
+  const handleCancelEditExpiry = () => {
+    setEditingExpiry(false);
+    setExpiryValue("");
+  };
+
+  const handleSaveExpiry = async () => {
+    setExpiryLoading(true);
+    const result = await updateQrCodeExpiryAction({
+      qrId: qr.id,
+      expiresAt: expiryValue || null,
+    });
+    setExpiryLoading(false);
+
+    if (result && "error" in result) {
+      alert((result as { error: string }).error);
+    } else {
+      setEditingExpiry(false);
+      // Refresh page to update UI
+      window.location.reload();
+    }
+  };
 
   useEffect(() => {
     generateQrDataUrl(scanUrl).then(setQrDataUrl);
   }, [scanUrl]);
 
+  // Helper function to generate QR code with background using html-to-image
+  const generateQrDataUrlWithBackground = useCallback(
+    async (data: string, backgroundUrl: string): Promise<string> => {
+      try {
+        console.log('[QR Debug] Starting generateQrDataUrlWithBackground with html-to-image');
+        console.log('[QR Debug] Data:', data);
+        console.log('[QR Debug] Background URL:', backgroundUrl);
+
+        // Load background image to get dimensions
+        console.log('[QR Debug] Loading background image to get dimensions...');
+        const bgImg = new window.Image();
+        bgImg.crossOrigin = "anonymous";
+        bgImg.src = backgroundUrl;
+
+        const bgLoaded = new Promise<void>((resolve, reject) => {
+          bgImg.onload = () => {
+            console.log('[QR Debug] Background image loaded:', `${bgImg.width}x${bgImg.height}`);
+            resolve();
+          };
+          bgImg.onerror = () => {
+            console.error('[QR Debug] Failed to load background image');
+            reject(new Error("Failed to load background"));
+          };
+        });
+
+        await bgLoaded;
+
+        // Generate QR code as data URL - size is 45% of background width
+        const qrSize = Math.round(bgImg.width * 0.45);
+        console.log('[QR Debug] Generating QR code as data URL with size:', qrSize);
+        const qrDataUrl = await QRCode.toDataURL(data, {
+          width: qrSize,
+          margin: 2,
+          color: {
+            dark: "#000000",
+            light: "#FFFFFF",
+          },
+          errorCorrectionLevel: "H",
+        });
+        console.log('[QR Debug] QR data URL generated, length:', qrDataUrl.length);
+
+        // Create hidden container for rendering
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        container.style.top = '-9999px';
+        container.style.overflow = 'hidden';
+
+        // Create wrapper with relative positioning - size matches background
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        wrapper.style.width = `${bgImg.width}px`;
+        wrapper.style.height = `${bgImg.height}px`;
+        wrapper.style.display = 'inline-block';
+
+        // Add background image
+        const bgDiv = document.createElement('img');
+        bgDiv.src = backgroundUrl;
+        bgDiv.style.width = '100%';
+        bgDiv.style.height = '100%';
+        bgDiv.style.display = 'block';
+        wrapper.appendChild(bgDiv);
+
+        // Add QR code overlay - 45% of background width, left 10% of background width, vertically centered
+        const qrOffsetX = Math.round(bgImg.width * 0.1);
+        const qrOffsetY = Math.round((bgImg.height - qrSize) / 2.2);
+
+        const qrDiv = document.createElement('img');
+        qrDiv.src = qrDataUrl;
+        qrDiv.style.position = 'absolute';
+        qrDiv.style.left = `${qrOffsetX}px`;
+        qrDiv.style.top = `${qrOffsetY}px`;
+        qrDiv.style.width = `${qrSize}px`;
+        qrDiv.style.height = `${qrSize}px`;
+        qrDiv.style.objectFit = 'contain';
+        wrapper.appendChild(qrDiv);
+
+        container.appendChild(wrapper);
+        document.body.appendChild(container);
+
+        try {
+          // Use html-to-image to capture with high quality
+          console.log('[QR Debug] Capturing with html-to-image, pixelRatio: 2...');
+          const dataUrl = await toPng(wrapper, {
+            pixelRatio: 2, // Higher quality
+            backgroundColor: undefined,
+          });
+          console.log('[QR Debug] Capture complete, data URL length:', dataUrl.length);
+
+          // Cleanup
+          document.body.removeChild(container);
+
+          return dataUrl;
+        } catch (captureError) {
+          console.error('[QR Debug] html-to-image capture failed:', captureError);
+          document.body.removeChild(container);
+          throw captureError;
+        }
+      } catch (error) {
+        console.error("Failed to generate QR with background:", error);
+        throw error;
+      }
+    },
+    []
+  );
+
   function handleDownload() {
-    if (qrDataUrl) {
-      const a = document.createElement("a");
-      a.href = qrDataUrl;
-      a.download = `qr-${qr.code}.png`;
-      a.click();
+    console.log('[QR Debug] handleDownload called');
+    if (!qrDataUrl) {
+      console.log('[QR Debug] No qrDataUrl available, aborting');
+      return;
     }
+
+    const backgroundUrl = "/accept/images/QR_background.jpg";
+    console.log('[QR Debug] Attempting to download QR with background');
+
+    // Generate QR code with background
+    generateQrDataUrlWithBackground(scanUrl, backgroundUrl)
+      .then((dataUrl) => {
+        console.log('[QR Debug] Success! Data URL length:', dataUrl.length);
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `qr-${qr.code}-with-bg.png`;
+        a.click();
+        console.log('[QR Debug] Download triggered');
+      })
+      .catch((err) => {
+        console.error('[QR Debug] Failed to generate QR with background:', err);
+        // Fallback: download original QR code
+        console.log('[QR Debug] Falling back to original QR without background');
+        const a = document.createElement("a");
+        a.href = qrDataUrl;
+        a.download = `qr-${qr.code}.png`;
+        a.click();
+      });
   }
 
   function handleCopyUrl() {
@@ -174,94 +402,266 @@ function QrCodeCard({
     });
   }
 
-  const socials = qr.socialLinks as { facebook?: string; tiktok?: string } | null;
+  async function handlePreviewDownload() {
+    console.log('[QR Debug] handlePreviewDownload called');
+    if (!qrDataUrl) {
+      console.log('[QR Debug] No qrDataUrl available, aborting');
+      return;
+    }
+
+    const backgroundUrl = "/accept/images/QR_background.jpg";
+    setPreviewLoading(true);
+
+    try {
+      const result = await generateQrDataUrlWithBackground(scanUrl, backgroundUrl);
+      setPreviewUrl(result);
+
+      // Get background image dimensions for preview display
+      const bgImg = new window.Image();
+      bgImg.crossOrigin = "anonymous";
+      bgImg.src = backgroundUrl;
+      await new Promise<void>((resolve) => {
+        bgImg.onload = () => {
+          setPreviewBgSize({ width: bgImg.width, height: bgImg.height });
+          resolve();
+        };
+      });
+
+      setShowPreview(true);
+    } catch (error) {
+      console.error('[QR Debug] Preview failed:', error);
+      alert('Không thể tạo preview. Vui lòng thử lại.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function handleConfirmDownload() {
+    if (!previewUrl) return;
+    const a = document.createElement("a");
+    a.href = previewUrl;
+    a.download = `qr-${qr.code}-with-bg.png`;
+    a.click();
+    setShowPreview(false);
+  }
+
+  function handleClosePreview() {
+    setShowPreview(false);
+    // Cleanup preview URL after a delay
+    setTimeout(() => setPreviewUrl(null), 300);
+  }
+
+  const socials = socialLinks as { facebook?: string; tiktok?: string } | null;
 
   return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        {/* QR preview */}
-        <div className="flex justify-center bg-white p-4 rounded-lg border border-border">
-          {qrDataUrl ? (
-            <Image
-              src={qrDataUrl}
-              alt="QR Code"
-              width={160}
-              height={160}
-              className="rounded"
-              unoptimized
-            />
-          ) : (
-            <div className="h-40 w-40 flex items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <>
+      <Card>
+        <CardContent className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+          {/* QR preview */}
+          <div className="flex justify-center bg-white p-3 sm:p-4 rounded-lg border border-border">
+            {qrDataUrl ? (
+              <Image
+                src={qrDataUrl}
+                alt="QR Code"
+                width={140}
+                height={140}
+                className="rounded w-32 h-32 sm:w-40 sm:h-40 object-contain"
+                unoptimized
+              />
+            ) : (
+              <div className="h-32 w-32 sm:h-40 sm:w-40 flex items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            )}
+          </div>
+
+          {/* Code + status */}
+          <div className="text-center">
+            <p className="font-mono text-sm font-bold text-text">{qr.code}</p>
+            <div className="mt-1 flex items-center justify-center gap-2 flex-wrap">
+              <Badge variant={qr.isActive ? "success" : "error"}>
+                {qr.isActive ? "Hoạt động" : "Tắt"}
+              </Badge>
+              {isExpired ? (
+                <Badge variant="error">Hết hạn</Badge>
+              ) : expiresAt && daysRemaining !== null && daysRemaining <= 7 ? (
+                <Badge variant="warning">Sắp hết hạn ({daysRemaining} ngày)</Badge>
+              ) : expiresAt && daysRemaining !== null ? (
+                <span className="text-xs text-gray-500">{daysRemaining} ngày còn lại</span>
+              ) : null}
+              <span className="text-xs text-gray-500">{qr._count.reviews} scan</span>
+            </div>
+          </div>
+
+          {/* Social links */}
+          {socials && (socials.facebook || socials.tiktok) && (
+            <div className="flex justify-center gap-3">
+              {socials.facebook && (
+                <a href={socials.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
+                  Facebook
+                </a>
+              )}
+              {socials.tiktok && (
+                <a href={socials.tiktok} target="_blank" rel="noopener noreferrer" className="text-xs text-pink-500 hover:underline">
+                  TikTok
+                </a>
+              )}
             </div>
           )}
-        </div>
 
-        {/* Code + status */}
-        <div className="text-center">
-          <p className="font-mono text-sm font-bold text-text">{qr.code}</p>
-          <div className="mt-1 flex items-center justify-center gap-2">
-            <Badge variant={qr.isActive ? "success" : "error"}>
-              {qr.isActive ? "Hoạt động" : "Tắt"}
-            </Badge>
-            <span className="text-xs text-gray-500">{qr._count.reviews} scan</span>
+          {/* Actions */}
+          <div className="flex flex-wrap gap-1">
+            {/* Copy URL - always visible */}
+            <button
+              onClick={handleCopyUrl}
+              className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[80px]"
+              title="Copy URL"
+            >
+              {copied ? <Check className="h-3 w-3 text-green-500 flex-shrink-0" /> : <Copy className="h-3 w-3 flex-shrink-0" />}
+              {copied ? "Đã copy" : "Copy"}
+            </button>
+            {/* Download PNG - always visible */}
+            <button
+              onClick={handlePreviewDownload}
+              className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors flex-1 min-w-[60px]"
+              title="Preview & Tải PNG"
+              disabled={previewLoading}
+            >
+              {previewLoading ? (
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              ) : (
+                <Download className="h-3 w-3 flex-shrink-0" />
+              )}
+              PNG
+            </button>
+            {/* Management actions - only visible if canManage */}
+            {canManage && (
+              <>
+                <button
+                  onClick={() => onToggle(qr.id)}
+                  className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+                  title={qr.isActive ? "Tắt" : "Bật"}
+                >
+                  {qr.isActive ? (
+                    <ToggleRight className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <ToggleLeft className="h-3 w-3 text-gray-400" />
+                  )}
+                </button>
+                <button
+                  onClick={handleStartEditExpiry}
+                  className="flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
+                  title="Chỉnh sửa hạn sử dụng"
+                  disabled={editingExpiry}
+                >
+                  <Calendar className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => onDelete(qr.id)}
+                  className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
+                  title="Xóa"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Expiry Edit Form */}
+          {editingExpiry && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-text">Hạn sử dụng</label>
+                  <input
+                    type="datetime-local"
+                    value={expiryValue}
+                    onChange={(e) => setExpiryValue(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-border bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Để trống để không có hạn sử dụng
+                  </p>
+                </div>
+                {expiryValue && (
+                  <div className="text-xs text-gray-600">
+                    {(() => {
+                      const date = new Date(expiryValue);
+                      const now = new Date();
+                      const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      return days > 0 ? `Còn ${days} ngày` : `Đã hết ${Math.abs(days)} ngày`;
+                    })()}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEditExpiry}
+                    className="px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 rounded border border-border"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={handleSaveExpiry}
+                    disabled={expiryLoading}
+                    className="px-3 py-1 text-xs font-medium bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {expiryLoading ? "Đang lưu..." : "Lưu"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Preview Dialog */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={handleClosePreview}>
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-bold text-text">Preview QR Code</h3>
+              <button
+                onClick={handleClosePreview}
+                className="text-gray-500 hover:text-gray-700 text-2xl font-bold leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6 flex justify-center">
+              {previewUrl && (
+                <div style={{ maxWidth: '100%', overflow: 'auto' }}>
+                  <Image
+                    src={previewUrl}
+                    alt="QR Code with Background"
+                    width={previewBgSize?.width || 300}
+                    height={previewBgSize?.height || 533}
+                    className="rounded-lg shadow-lg"
+                    unoptimized
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={handleClosePreview}
+                className="px-4 py-2 border border-border rounded-md text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={handleConfirmDownload}
+                className="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Tải về
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* Social links */}
-        {socials && (socials.facebook || socials.tiktok) && (
-          <div className="flex justify-center gap-3">
-            {socials.facebook && (
-              <a href={socials.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
-                Facebook
-              </a>
-            )}
-            {socials.tiktok && (
-              <a href={socials.tiktok} target="_blank" rel="noopener noreferrer" className="text-xs text-pink-500 hover:underline">
-                TikTok
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-1">
-          <button
-            onClick={handleCopyUrl}
-            className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-            title="Copy URL"
-          >
-            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-            {copied ? "Đã copy" : "Copy URL"}
-          </button>
-          <button
-            onClick={handleDownload}
-            className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 px-2 text-xs font-medium hover:bg-gray-50 transition-colors"
-            title="Tải PNG"
-          >
-            <Download className="h-3 w-3" />
-            PNG
-          </button>
-          <button
-            onClick={() => onToggle(qr.id)}
-            className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-            title={qr.isActive ? "Tắt" : "Bật"}
-          >
-            {qr.isActive ? (
-              <ToggleRight className="h-3 w-3 text-green-500" />
-            ) : (
-              <ToggleLeft className="h-3 w-3 text-gray-400" />
-            )}
-          </button>
-          <button
-            onClick={() => onDelete(qr.id)}
-            className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-            title="Xóa"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
-      </CardContent>
-    </Card>
+      )}
+    </>
   );
 }

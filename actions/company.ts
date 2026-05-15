@@ -2,30 +2,56 @@
 
 import { prisma } from "@/lib/prisma";
 import { companySchema } from "@/lib/validators";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, canUpdateCompany, canManageCompany, hasPermission, isCompanyOwner, getUserCompanies } from "@/lib/auth";
 import { generateReviewsForCompany } from "./review";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 // ==========================================
 // CREATE COMPANY
 // ==========================================
 export async function createCompanyAction(
   prevState: { error?: string } | null,
-  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; complaintEmail?: string }
+  data: {
+    name: string;
+    address: string;
+    category: string;
+    phone: string;
+    keywords: string;
+    googleMapsUrl: string;
+    googleReviewUrl: string;
+    hashtags: string;
+    placeId: string;
+    logoUrl?: string;
+    complaintEmail?: string;
+    facebook?: string;
+    tiktok?: string;
+  }
 ) {
   const user = await requireAuth();
+
+  // Check permission: ADMIN, USER, EMPLOYEE, or has global companies:update
+  const allowedRoles = ["ADMIN", "USER", "EMPLOYEE"];
+  const hasGlobalManage = await hasPermission(user.id, "companies:update");
+  if (!allowedRoles.includes(user.role) && !hasGlobalManage) {
+    return { error: "Không có quyền tạo khách hàng" };
+  }
 
   const raw = {
     name: data.name,
     address: data.address,
     category: data.category,
+    phone: data.phone,
+    keywords: data.keywords,
     googleMapsUrl: data.googleMapsUrl,
     googleReviewUrl: data.googleReviewUrl,
     hashtags: data.hashtags,
     placeId: data.placeId,
-    logoUrl: "",
+    logoUrl: data.logoUrl || "",
     complaintEmail: data.complaintEmail || "",
+    socialLinks: (data.facebook || data.tiktok) ? {
+      facebook: data.facebook || undefined,
+      tiktok: data.tiktok || undefined,
+    } : undefined,
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -40,12 +66,15 @@ export async function createCompanyAction(
         name: parsed.data.name,
         address: parsed.data.address,
         category: parsed.data.category,
+        phone: parsed.data.phone || null,
+        keywords: parsed.data.keywords || null,
         googleMapsUrl: parsed.data.googleMapsUrl || null,
         googleReviewUrl: parsed.data.googleReviewUrl || null,
         hashtags: parsed.data.hashtags || null,
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
         complaintEmail: parsed.data.complaintEmail || null,
+        socialLinks: parsed.data.socialLinks || undefined,
       },
     });
 
@@ -56,7 +85,7 @@ export async function createCompanyAction(
     return { success: true, companyId: company.id };
   } catch (error) {
     console.error("Create company error:", error);
-    return { error: "Không thể tạo công ty. Vui lòng thử lại." };
+    return { error: "Không thể tạo khách hàng. Vui lòng thử lại." };
   }
 }
 
@@ -65,24 +94,42 @@ export async function createCompanyAction(
 // ==========================================
 export async function updateCompanyAction(
   id: string,
-  data: { name: string; address: string; category: string; googleMapsUrl: string; googleReviewUrl: string; hashtags: string; placeId: string; logoUrl?: string; complaintEmail?: string }
+  data: {
+    name: string;
+    address: string;
+    category: string;
+    phone: string;
+    keywords: string;
+    googleMapsUrl: string;
+    googleReviewUrl: string;
+    hashtags: string;
+    placeId: string;
+    logoUrl?: string;
+    complaintEmail?: string;
+    socialLinks?: { facebook?: string; tiktok?: string } | null;
+  }
 ) {
   const user = await requireAuth();
 
-  const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return { error: "Công ty không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền chỉnh sửa" };
+  // Check if user can update this company (owner OR has companies:update permission globally or per-company)
+  const canUpdate = await canUpdateCompany(id);
+  if (!canUpdate) {
+    return { error: "Không có quyền chỉnh sửa" };
+  }
 
   const raw = {
     name: data.name,
     address: data.address,
     category: data.category,
+    phone: data.phone,
+    keywords: data.keywords,
     googleMapsUrl: data.googleMapsUrl,
     googleReviewUrl: data.googleReviewUrl,
     hashtags: data.hashtags,
     placeId: data.placeId,
     logoUrl: data.logoUrl || "",
     complaintEmail: data.complaintEmail || "",
+    socialLinks: data.socialLinks || undefined,
   };
 
   const parsed = companySchema.safeParse(raw);
@@ -97,12 +144,15 @@ export async function updateCompanyAction(
         name: parsed.data.name,
         address: parsed.data.address,
         category: parsed.data.category,
+        phone: parsed.data.phone || null,
+        keywords: parsed.data.keywords || null,
         googleMapsUrl: parsed.data.googleMapsUrl || null,
         googleReviewUrl: parsed.data.googleReviewUrl || null,
         hashtags: parsed.data.hashtags || null,
         placeId: parsed.data.placeId || null,
         logoUrl: parsed.data.logoUrl || null,
         complaintEmail: parsed.data.complaintEmail || null,
+        socialLinks: parsed.data.socialLinks || undefined,
       },
     });
 
@@ -110,8 +160,33 @@ export async function updateCompanyAction(
     revalidatePath(`/companies/${id}`);
     return { success: true };
   } catch (error) {
-    return { error: "Không thể cập nhật công ty" };
+    return { error: "Không thể cập nhật khách hàng" };
   }
+}
+
+// ==========================================
+// TOGGLE COMPANY ACTIVE / DEACTIVE
+// ==========================================
+export async function toggleCompanyActiveAction(id: string) {
+  const user = await requireAuth();
+
+  // Check if user can manage this company (owner OR has companies:update permission globally or per-company)
+  const canManage = await canManageCompany(id);
+  if (!canManage) {
+    return { error: "Không có quyền thao tác" };
+  }
+
+  const company = await prisma.company.findUnique({ where: { id } });
+  if (!company) return { error: "Khách hàng không tồn tại" };
+
+  await prisma.company.update({
+    where: { id },
+    data: { isActive: !company.isActive },
+  });
+
+  revalidatePath("/companies");
+  revalidatePath(`/companies/${id}`);
+  return { success: true, isActive: !company.isActive };
 }
 
 // ==========================================
@@ -120,14 +195,41 @@ export async function updateCompanyAction(
 export async function deleteCompanyAction(id: string) {
   const user = await requireAuth();
 
+  // Check if user can manage this company (owner OR has companies:update permission globally or per-company)
+  const canManage = await canManageCompany(id);
+  if (!canManage) {
+    return { error: "Không có quyền xóa" };
+  }
+
+  // Check if company exists
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return { error: "Công ty không tồn tại" };
-  if (company.userId !== user.id) return { error: "Không có quyền xóa" };
+  if (!company) {
+    return { error: "Khách hàng không tồn tại" };
+  }
 
-  await prisma.company.delete({ where: { id } });
+  try {
+    // Delete related records first to avoid foreign key constraint errors
+    // 1. Delete reviews
+    await prisma.review.deleteMany({ where: { companyId: id } });
 
-  revalidatePath("/companies");
-  return { success: true };
+    // 2. Delete QR codes
+    await prisma.qrCode.deleteMany({ where: { companyId: id } });
+
+    // 3. Delete customer contacts
+    await prisma.customerContact.deleteMany({ where: { companyId: id } });
+
+    // 4. Delete user permissions related to this company
+    await prisma.userPermission.deleteMany({ where: { companyId: id } });
+
+    // 5. Finally delete the company
+    await prisma.company.delete({ where: { id } });
+
+    revalidatePath("/companies");
+    return { success: true };
+  } catch (error) {
+    console.error("Delete company error:", error);
+    return { error: "Không thể xóa khách hàng. Vui lòng thử lại." };
+  }
 }
 
 // ==========================================
@@ -138,13 +240,36 @@ export async function listCompaniesAction(params: {
   category?: string;
   page?: number;
   pageSize?: number;
+  status?: "active" | "inactive" | "all";
 }) {
   const user = await requireAuth();
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
 
-  const where = {
-    userId: user.id,
+  // Determine which companies user can see
+  let userCompanyIds: string[];
+  if (user.role === "ADMIN") {
+    // Admin sees all
+    const all = await prisma.company.findMany({ select: { id: true } });
+    userCompanyIds = all.map(c => c.id);
+  } else {
+    // Check if user has global companies:update permission
+    const hasGlobalManage = await hasPermission(user.id, "companies:update");
+    if (hasGlobalManage) {
+      // Global manage can see all companies
+      const all = await prisma.company.findMany({ select: { id: true } });
+      userCompanyIds = all.map(c => c.id);
+    } else {
+      // Otherwise, only companies they own or have companies:read permission for
+      userCompanyIds = (await getUserCompanies(user.id)).map(c => c.id);
+    }
+  }
+
+  // Build where clause
+  const where: any = {
+    id: { in: userCompanyIds },
+    ...(params.status === "active" ? { isActive: true } : {}),
+    ...(params.status === "inactive" ? { isActive: false } : {}),
     ...(params.search && {
       OR: [
         { name: { contains: params.search, mode: "insensitive" as const } },
@@ -176,4 +301,39 @@ export async function listCompaniesAction(params: {
       totalPages: Math.ceil(total / pageSize),
     },
   };
+}
+
+// ==========================================
+// UPDATE COMPANY SOCIAL LINKS (Facebook/TikTok)
+// ==========================================
+export async function updateCompanySocialLinksAction(
+  companyId: string,
+  socialLinks: { facebook?: string; tiktok?: string }
+) {
+  const user = await requireAuth();
+
+  // Check permission: global companies:update OR is owner
+  const hasGlobalManage = await hasPermission(user.id, "companies:update");
+  const isOwner = await isCompanyOwner(user.id, companyId);
+
+  if (!hasGlobalManage && !isOwner) {
+    return { error: "Không có quyền cập nhật liên kết mạng xã hội" };
+  }
+
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) return { error: "Khách hàng không tồn tại" };
+
+  try {
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { socialLinks: socialLinks || undefined },
+    });
+
+    revalidatePath(`/companies/${companyId}`);
+    revalidatePath(`/companies/${companyId}/qr-codes`);
+    return { success: true };
+  } catch (error) {
+    console.error("Update social links error:", error);
+    return { error: "Không thể cập nhật liên kết mạng xã hội" };
+  }
 }
