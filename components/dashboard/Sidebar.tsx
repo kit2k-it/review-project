@@ -26,6 +26,7 @@ const navItemsByRole: Record<string, { href: string; label: string; icon: React.
     { href: "/admin/users", label: "Quản lý tài khoản", icon: Users },
     { href: "/admin/employees", label: "Phân quyền & Nhân viên", icon: UserRound },
     { href: "/admin/background-jobs", label: "Background Jobs", icon: Activity },
+    { href: "/admin/prompt-templates", label: "Prompt Templates", icon: QrCode },
   ],
   CLIENT: [
     // Không hiển thị "Tổng quan" cho CLIENT

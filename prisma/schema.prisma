@@ -248,3 +248,19 @@ model ServiceAccount {
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
 }
+
+// ============================================
+// PROMPT TEMPLATE MANAGEMENT
+// ============================================
+
+model PromptTemplate {
+  id          String    @id @default(cuid())
+  name        String    @unique // "review-generator", "hashtag-generator"
+  description String?   // Mô tả用途
+  content     String    // Nội dung prompt, có thể chứa variables như {{companyName}}, {{category}}
+  version     Int       @default(1) // Track changes
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([name])
+}
